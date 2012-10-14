@@ -1,0 +1,54 @@
+Subject: Phase 1 - Munoz: Multilanguage programs in OCaml and
+JavaScript
+
+Phase 1 Project Selection Status Report
+
+Name: Eduardo Munoz
+
+College: Magdalene
+
+User Identifier: em487
+
+Director of Studies: Dr John Fawcett
+
+Please complete 1, 2 and 3 below.
+
+1. Please write 100 words on your current project ideas.
+
+The goal of my project idea is to implement interoperability between
+OCaml and JavaScript: multilanguage programs.
+
+The mechanisms this project will be based on are described (for an
+ML-like calculus and a Scheme-like one) in
+http://www.eecs.northwestern.edu/~robby/pubs/papers/toplas09-mf.pdf
+. I intend to implement the "lump embedding" and "natural embedding"
+(as described in that paper) as the core of the project.
+
+Possible extensions are integrating OCaml with a browser, allowing
+sending of JavaScript code from the server (multilanguage OCaml +
+JavaScript) and the client.
+
+The implementation will be done by writing extending the
+OCaml compiler (lexer, parser, type-checker and code generator).
+
+The main difficulty will be to integrate JavaScript's dynamic and
+loose type system with the strictness of OCaml, without losing the
+type-soundness of OCaml.
+
+2. Please list names of potential project supervisors.
+
+Tomas Petricek (tomas.petricek@cl.cam.ac.uk) has agreed to supervise
+this project.
+
+
+3. Is there any chance that your project will involve any computing
+resources other than the Computing Service's PWF and software that is
+already installed there, for example: your own machine, machines in
+College, special peripherals, imported software packages, special
+hardware, network access, substantial extra disc space on the PWF.
+
+If so indicate below what, and what it is needed for.
+
+I will complete most of the implementation on my own laptop.  I will
+work with the OCaml compiler (open source) and will use a JavaScript
+engine (not decided yet, but possibilities are rhino and v8).

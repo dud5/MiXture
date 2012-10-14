@@ -1,0 +1,309 @@
+%%%%%%%%%%%%%%% Updated by MR March 2007 %%%%%%%%%%%%%%%%
+\documentclass[12pt,a4paper]{article} \usepackage{a4wide}
+\bibliographystyle{plain}
+\newcommand{\fs}{F\nolinebreak\hspace{-.05em}\raisebox{.6ex}{\tiny\bf
+    \#}}
+
+\parindent 0pt
+\parskip 6pt
+
+\begin{document}
+
+\thispagestyle{empty}
+
+\rightline{\large Eduardo Munoz} \medskip \rightline{\large Magdalene
+  College} \medskip \rightline{\large em487}
+
+\vfil
+
+\centerline{\large Computer Science Tripos Part II Project Proposal \texttt{draft}}
+\vspace{0.4in} \centerline{\Large\bf Multilanguage programming in
+  \fs\ and JavaScript} \vspace{0.3in} \centerline{\large \emph{\today}}
+
+\vfil
+
+{\bf Project Originator:} \emph{Eduardo Munoz}
+
+\vspace{0.5in}
+
+{\bf Project Supervisor:} \emph{Tomas Petricek}
+
+\vspace{0.2in}
+
+{\bf Signature:}
+
+\vspace{0.5in}
+
+{\bf Director of Studies:} \emph{Dr John Fawcett}
+
+\vspace{0.2in}
+
+{\bf Signature:}
+
+\vspace{0.5in}
+
+{\bf Overseers:} \emph{Dr S. Teufel} and \emph{Dr J. Crowcroft}
+
+\vspace{0.2in}
+
+{\bf Signatures:}
+
+\vfil \eject
+
+
+\section{Introduction and description of the work}
+
+Selecting the programming language to use when implementing a certain
+algorithm is crucial in the success of the project. For this reason,
+large scale software systems tend to be written in several
+languages. However, the interactions between those components may be
+an issue.  There are several approaches to tackle this:
+
+\begin{enumerate}
+
+\item Foreign function interfaces (FFI): mechanism by which a program
+  written in one language may call procedures from a program in a
+  different language.
+
+\item Multilanguage runtimes: Several programming languages target the
+  same architecture, allowing a richer interaction between languages:
+  e.g. inherit classes in one language defined in another. Examples of
+  multilanguage runtimes are Java, Scala, Jython, etc. targeting the
+  Java Virtual Machine; all programs written for the .NET framework
+  target the CLR.
+
+\item Embedded interpreters: implementing an interpreter of the target
+  language in the host language and use a type-indexed embedding and
+  projection algorithm.
+
+\end{enumerate}
+
+In this project, we intend to explore the ideas described in
+\cite{journals/toplas/MatthewsF09}, for an ML-like language and
+JavaScript. This includes producing an implementation of the
+\emph{lump embedding} and the \emph{natural embedding}. The former
+concept is related to FFI frameworks (such as the Java Native
+Interface), where each environment sees foreign values as ``lumps''
+(values with an opaque type). The natural embedding provides a richer
+interoperability between the two languages, allowing values to be
+converted across the boundary from one language to the other. The
+implementation for the natural embedding can be seen as FFI with some
+properties of multilanguage runtimes.
+
+An example of using the lump embedding (note that the syntax hasn't
+been decided yet, this is for illustrative purposes):
+
+\begin{verbatim}
+    (* implementation missing; types subject to change *)
+    let eval_js x : JS list->JS = raise notImplemented;
+    let apply_lump f x = eval_js([f,x]);
+    let succ:Lump = JS("function(a) {return a+1;}");
+    in apply_lump(succ, JS(“3”));
+
+    > val it: JS(“4”) : Lump
+\end{verbatim}
+
+In this case, the ML-like language can only interact with values of
+type \texttt{Lump} to interoperate with JavaScript (using the type constructor
+\texttt{JS}).
+
+An example of using the natural embedding (note that the syntax hasn't
+been decided yet, this is for illustrative purposes):
+
+\begin{verbatim}
+    let test (x:string->unit) :unit = x("testing");
+    in test(JS(string, unit, "function(s) {print(s)}"));
+    > val it: () : unit
+\end{verbatim}
+
+
+\section{Starting point}
+
+This project will involve material from \emph{Types} (deal with
+language boundaries), \emph{Semantics of Programming Languages}
+(specify the behavior of the framework), \emph{Compiler Construction}
+(analyze the runtime of the JavaScript engine to integrate it) and
+\emph{Foundations of Computer Science} (functional programming, ML).
+
+
+\section{Resources required}
+
+The implementation will be completed on my own laptop.
+
+I will make use of a JavaScript engine (e.g. \emph{V8}) and an ML-like
+functional programming language (OCaml or \fs).
+
+
+\section{Substance and structure of the project}
+
+The goal of this project is to design and implement a framework for the multilanguage programming paradigm. Some aspects in which two programming languages can differ in are:
+
+\begin{enumerate}\interlinepenalty10000
+\item \emph{Type system}: JavaScript is an untyped\footnote{There is some
+    confusion with the terms \emph{dynamically typed} and
+    \emph{untyped}. In the academic literature, the term dynamically typed
+    was introduced much later than untyped to mean the same
+    concept. Perhaps the best categorization for JavaScript is \emph{weakly dynamically typed}.}
+  language, while \fs\ has strong static typing with type inference.
+\item \emph{Evaluation rules}: for instance, JavaScript allows the evaluation of two empty lists \cite{ECMA-262}; OCaml however forbids this operation because it doesn't type check:
+\begin{verbatim}
+(JavaScript)
+js> [] + []
+
+// (empty string)
+
+--------------------
+(OCaml)
+# [] + [];;
+Error: This expression has type 'a list
+       but an expression was expected of type int
+\end{verbatim}
+
+\item \emph{Values}: for instance, JavaScript treats all numbers as floating point numbers:
+\begin{verbatim}
+(JavaScript)
+js> 1000000000000000000 + 1
+1000000000000000000
+js> 4611686018427387903 + 1
+4611686018427388000
+--------------------
+(OCaml)
+# 1000000000000000000 + 1;;
+- : int = 1000000000000000001
+# 4611686018427387903 + 1;;
+- : int = -4611686018427387904
+\end{verbatim}
+\item \emph{Syntax}: JavaScript's syntax is loosely based on that by C and Java, whereas the syntax of \fs\ is that of the ML-language family.
+\item \emph{Purpose}: JavaScript is the language of the web, used mainly to enhance user interfaces and dynamic websites. \fs\ is a general purpose language.
+
+\end{enumerate}
+
+Work will have to be carried out in the following areas:
+\begin{enumerate}
+
+\item \emph{Type system}: handle types at the boundaries of the programming languages,
+  making sure the type soundness of \fs\ is preserved (possible use of
+  contracts).
+
+\item \emph{Evaluation rules}: generate glue / wrapper code that allow treating a JavaScript function as \fs\ function (which might need contracts).
+
+\item \emph{Values}: access JavaScript values from the \fs\ runtime using the
+  JavaScript engine.
+
+\item \emph{Syntax}: define a clear interface with which JavaScript code will be
+  embedded in \fs\ source files (either inline or loading a file), both
+  for the lump and the natural embedding.
+
+
+\end{enumerate}
+
+\section{Possible extensions}
+\begin{enumerate}
+\item Syntax-check the JavaScript syntax using \fs\ type providers.
+\end{enumerate}
+
+\section{Evaluation strategy}
+
+Quantitative:
+\begin{itemize}
+\item Compare the performance difference between the system
+  implementing the lump embedding and the natural embedding.
+\item Estimate the relationship between the number of “foreign”
+  boundary crossings and the execution time.
+\item Compare the performance difference with other systems that allow
+  some interoperability between \fs\ and JavaScript.
+\end{itemize}
+
+Qualitative:
+\begin{itemize}
+\item Show the expressiveness of the system.
+\item Proof of correctness, by executing some tests.
+\end{itemize}
+
+
+\section{Backup strategy}
+
+All source files (code and \LaTeX) are in my
+local machine in a \emph{git} repository, which is hosted at
+\emph{Bitbucket} and also replicated to an external hard drive.  The
+git repository will be useful when writing the dissertation as it will
+be used as a work log.
+
+\section{Success criteria}
+
+\begin{enumerate}
+
+\item The resulting framework should not take a significant amount of
+  time than executing the respective monolingual runtimes.
+
+\item The lump embedding implementation should be able to pass values
+  from JavaScript to \fs\ and then pass them back.
+
+\item The natural embedding should be able to pass a function from
+  JavaScript to \fs\ (and the other way round) and invoke it on the
+  other side of the boundary
+
+\item A convenient syntax for multilanguage programming has been
+  designed.
+
+\item Tests of correctness have been passed.
+
+\end{enumerate}
+
+\section{Timetable and milestones}
+
+\subsection*{Initial preparation: 18.10.2012 - 31.10.2012}
+
+Install \fs\ on my laptop (using the Mono framework for .NET); install
+Windows as a fallback.  Revise ML and become familiar with the
+differences in \fs.  Keep reading research papers and articles about
+the subject.  Research JavaScript engines and decide which one offers
+the best API to access JavaScript values.
+\\{\bf Milestone}:
+
+\subsection*{01.10.2012 - 14.11.2012 }
+Decide on a specific syntax for embedding JavaScript inside \fs.
+\\{\bf Milestone}:
+
+\subsection*{15.11.2012 - 28.11.2012}
+A
+\\{\bf Milestone}:
+
+\subsection*{29.11.2012 - 12.12.2012}
+B
+\\{\bf Milestone}:
+
+\subsection*{13.12.2012 - 26.12.2012}
+C
+\\{\bf Milestone}:
+
+\subsection*{27.12.2012 - 09.01.2012}
+D
+\\{\bf Milestone}:
+
+\subsection*{10.01.2012 - 23.01.2012}
+E
+\\{\bf Milestone}:
+
+\subsection*{24.01.2012 - 06.02.2012}
+Write the introduction, preparation and implementation sections.
+\\{\bf Milestone}: the dissertation document has been started.
+
+\subsection*{07.02.2012 - 20.02.2012}
+Finish off the following sections: preparation and implementation.
+Take evaluation metrics.
+\\{\bf Milestone}: preparation and implementation are finished. Evaluation data is gathered.
+
+\subsection*{21.02.2012 - 06.03.2012}
+Write the evaluation and conclusion sections of the dissertation.
+\\{\bf Milestone}: a draft of the whole dissertation is now complete.
+
+\subsection*{07.03.2012 - 20.03.2012}
+Make formatting changes to the document. Send final draft to my supervisor and make small adjustments if suggested.
+\\{\bf Milestone}: the document’s formatting is final.
+\subsection*{21.03.2012 - 03.04.2012}
+Make any last-minute minor changes to the dissertation / code if suggested by my supervisor or DoS.
+\\{\bf Milestone}: have the dissertation approved, hand it in.
+
+\bibliography{bibliography}
+\end{document}
