@@ -24,10 +24,6 @@ extern "C" void print_result(Persistent<Context> context, Persistent<Value> val)
     HandleScope handle_scope;
     Context::Scope context_scope(context);
     String::Utf8Value str(val);
-    // Handle<String> str = val->ToString();
-    // String::AsciiValue ascii(str);
-
-    // // const char* cstr = ToCString(str);
     cout << *str << endl;
 }
 
