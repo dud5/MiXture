@@ -1,7 +1,9 @@
+module Demo
+
 open System.Runtime.InteropServices
 open System
 open System.Collections.Generic
-
+open Microsoft.FSharp.NativeInterop
 
 type Void2 = delegate of nativeint -> nativeint
 
@@ -11,6 +13,10 @@ module V8 =
     extern nativeint create_function(nativeint, string, string)
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
     extern nativeint apply_function(nativeint, nativeint, nativeint)
+    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+    // for passing arrays, see
+    // http://stackoverflow.com/questions/12622160/from-c-sharp-to-f-pinned-array-and-stringbuilder-in-external-function-called-f
+    extern nativeint apply_function_arr(nativeint, nativeint, nativeint[])
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
     extern nativeint execute_string(nativeint, string)
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
@@ -22,12 +28,17 @@ module V8 =
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
     extern void dispose_handle(nativeint)
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern void unmanaged(nativeint, Void2)
-
-
+    extern void register_function(nativeint, Void2)
+    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+    extern nativeint get_argument(nativeint, nativeint, int)
+    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+    extern int arguments_length(nativeint, nativeint)
+    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+    extern nativeint make_FLump(nativeint, nativeint)
+    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+    extern int get_pointer_lump(nativeint, nativeint)
 
 type FSharpEvaluator = delegate of nativeint * nativeint -> nativeint
-
 
 type Lump =
     abstract Native: bool
@@ -64,7 +75,7 @@ let apply_func f arg =
 // let func = meth.Invoke(null, [| func_lump |])
 // let ty2 = lump_arg.GetType().GetGenericArguments.[0]
 // let meth2 = typeof<Utils>.GetMethod("Process").MakeGenericMethod [| ty2 |]
-// let arg = meth2.Invoke(null, [| lump_arg |]
+// let arg = meth2.Invoke(null, [| lump_arg |])
 // let result = invoke func arg
 
 // it could be substituted by something like (this could be abstracted into a function)
@@ -78,47 +89,64 @@ let apply_func f arg =
 let get_fslump_value (l:Lump) =
     l.GetType().GetProperty("Value").GetValue(l, null)
 
+
+
 let eval (func: Lump) (arg: Lump)  =
-    if func.Native && arg.Native then
-        let f = get_fslump_value func
-        let a = get_fslump_value arg
-        let in_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[0]
-        let actual_in_type = arg.GetType().GetGenericArguments().[0]
+    if not func.Native then failwith("the function is not an FSLump")
+    // get f as object
+    let f = get_fslump_value func
+    // what fun takes in
+    let in_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[0]
 
-        // type mismatch
-        if in_type <> actual_in_type then failwith("type mismatch")
+    let a = if arg.Native then get_fslump_value arg else box(arg)
+
+    // the type of arg
+    let actual_in_type = arg.GetType().GetGenericArguments().[0]
+    
+
+    // type mismatch
+    if in_type <> actual_in_type then failwith("type mismatch")
         
-        let result = apply_func f a
+    let result = apply_func f a
         
-        // first genericarguments is the type of Lump that func is
-        // second generic arguments is the input type (0) and return type of the function (1)
-        let return_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[1]
+    // first genericarguments is the type of Lump that func is
+    // second generic arguments is the input type (0) and return type of the function (1)
+    let return_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[1]
+    
+    let generic_lump = typedefof<FSLump<_>>
+    // Type of the FSLump<return_type>
+    let return_lump_type = generic_lump.MakeGenericType(return_type)
+    let return_constructor = return_lump_type.GetConstructors().[0]
+    
+    // construct FSLump<return_type>(result)
+    let return_lump = return_constructor.Invoke([| result |])
+    return_lump :?> Lump
 
-        let generic_lump = typedefof<FSLump<_>>
-        // Type of the FSLump<return_type>
-        let return_lump_type = generic_lump.MakeGenericType(return_type)
-        let return_constructor = return_lump_type.GetConstructors().[0]
 
-        // construct FSLump<return_type>(result)
-        let return_lump = return_constructor.Invoke([| result |])
-        return_lump :?> Lump
-    else
-        func
+// same as eval but works on lists of arguments
+let rec evalu (func: Lump) (arg: Lump list) =
+    match arg with
+        | x::xs -> evalu (eval func x) xs
+        | [] -> func
 
-let evaluator (func: nativeint) (arg: nativeint) =
-    let result = eval (fs_values.[func]) (fs_values.[arg])
-    result.Pointer
 
 
 let (|FS|JS|) (l: Lump) =
-    // change this to return l.Pointer (no necessary casts)
     if l.Native then
         FS(l.Pointer)
     else
-        let jlump = l :?> JSLump
         JS(l.Pointer)
 
+
 module JS =
+
+    let evaluator_ff (func: nativeint) (arg: nativeint) =
+        let result = eval (fs_values.[func]) (fs_values.[arg])
+        result.Pointer
+
+    let evaluator_fj (func: nativeint) (arg: nativeint) =
+        let result = eval (fs_values.[func]) (JSLump(arg))
+        result.Pointer
     
     let create_fun context code name =
         let pointer = V8.create_function(context, code, name)
@@ -134,85 +162,34 @@ module JS =
                 printf "%A" e
             | JS(pointer) -> V8.print_result(context, pointer)
 
-    let rec apply_JS_func context func arg =
+    let apply_JS_func context func arg =
         match (func, arg) with
             | (JS(p1), JS(p2)) -> JSLump(V8.apply_function(context, p1, p2))
             | (JS(p1), FS(p2)) -> JSLump(V8.apply_function(context, p1, p2))
-            // this doesn't work if x is an F# function
-            // | (FS(x), y) ->
-            //     match (fs_values.[x]) with
-            //         | :? FSLump<JSLump> as flump ->
-            //             let lump = (flump.Value) :> Lump
-            //             apply_JS_func context lump.Pointer
-                    // | _ as lump-> apply_JS_func context (fs_values.[l]) y
-            // | (JS(p1), FS(p2)) -> JSLump(V8.apply_function(context, p1, p2))
-            | (_,_) -> failwith "apply_JS_func only implemented for JSLump"
+            // do we really want this?
+            | (FS(p1), FS(p2)) -> JSLump(evaluator_ff p1 p2) 
+            | (FS(p1), JS(p2)) -> JSLump(evaluator_fj p1 p2)
+
+    let apply_JS_func_arr context func args =
+        let arg_pointers = Array.map (fun (x:Lump) -> x.Pointer) args
+        // let pinned_pointers = PinnedArray.of_array(arg_pointers)
+        let lumpy_func = func :> Lump
+        JSLump(V8.apply_function_arr(context, func.Pointer, arg_pointers))
+
+    let get_JS_argument context args index =
+        JSLump(V8.get_argument(context, args, index))
+
+
+    // is there an easier way of doing this in C++ with V8?
+    let get_all_JS_arguments context args =
+        let size = V8.arguments_length(context, args)
+        // delete index?
+        let init index = get_JS_argument context args index
+        Array.init size init
+        
 
     let dispose_handle handle =
         match handle with
             | JS(pointer) -> V8.dispose_handle(pointer)
             | _ -> failwith "dispose_handle only implemented for JSLump"
 
-
-
-let context = V8.get_context();
-
-let main() =
-
-    // let func = new FSLump<int->int->int>(fun x -> fun y -> x+y) :> Lump
-    // let arg1 = new FSLump<int>(10) :> Lump
-    // let arg2 = new FSLump<int>(32) :> Lump
-    // let result = eval (eval func arg1) arg2
-    // printf "%A\n" result
-    // let result2 = result :?> FSLump<int>
-    // printf "%d\n" result2.Value
-    // let num = JS.execute_JS context "3"
-
-    // let name = "add"
-    // let add = JS.create_fun context "var add = function(arg) {return arg+1;};" "add"
-
-    // printf "Calling function: %s\n" name;
-    // printf "Called with argument: ";
-
-    // JS.print_JS context num;
-
-    // let result = JS.apply_JS_func context add num
-
-    // printf "This is the result: ";
-    // JS.print_JS context result;
-
-    // JS.dispose_handle(num)
-    // printf "disposed num\n"
-
-    // // JS.print_JS context (new FSLump<int>(3));
-    // printf "\n"
-    // // V8.dispose_handle(num._pointer);
-    // // V8.dispose_handle(add._pointer);
-    // // V8.dispose_handle(result._pointer);
-
-    // // let er = fs_values.[new nativeint(0)]
-    // // let er_casted = er :?> FSLump<int>
-    // // printf "%d\n" er_casted.Value;
-
-    // let int2int = FSLump<int->int>(fun x -> x+1)
-    // let intval = FSLump<int>(3)
-    // printf "%A\n" fs_values
-    // // let l1 = int2int :> Lump
-    // // let l2 = intval :> Lump
-    // // printf "%d\n" l1.Pointer
-    // // printf "%d\n" l2.Pointer
-
-    
-    // let four = int2int.Value intval.Value
-    // printf "%d\n" four
-    let p (n: nativeint) =
-        printf "Executed in F#, called from JavaScript\n"
-        let result = JS.execute_JS context "4" :> Lump
-        result.Pointer
-
-    V8.unmanaged(context, new Void2(p))
-
-
-do
-    main()
-    V8.dispose_handle(context);

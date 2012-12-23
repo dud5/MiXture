@@ -10,8 +10,7 @@ extern "C" void dispose_handle(Persistent<String> prst) {
     prst.Clear();
 }
 
-extern "C" Persistent<Context> get_context() {
-    
+extern "C" Persistent<Context> get_context() {    
     return Context::New();
 }
 
@@ -28,7 +27,7 @@ extern "C" void print_result(Persistent<Context> context, Handle<Value> val) {
     cout << *str << endl;
 }
 
-extern "C" Handle<Value> execute_string(Persistent<Context> context, char* s) {
+extern "C" Handle<Value> execute_string(Persistent<Context> context, const char* s) {
     // Create a stack-allocated handle scope.
     HandleScope handle_scope;
 
@@ -93,40 +92,77 @@ extern "C" Handle<Value> apply_function(Persistent<Context> context,
     return js_result;
 }
 
-// typedef Handle<Value> (*Callback)(Handle<Value>, Handle<Value>);
+extern "C" Handle<Value> apply_function_arr(Persistent<Context> context,
+                                        Handle<Function> func,
+                                        Handle<Value>* arg) {
+    HandleScope handle_scope;
+
+    Context::Scope context_scope(context);
+
+    Handle<Value> result = func->Call(context->Global(), 2, arg);
+
+    Persistent<Value> js_result = Persistent<Value>::New(result);
+    
+    print_result(context, result);    
+    return js_result;
+}
 
 
 typedef Handle<Value> (*CALLBACK)(const Arguments&);
-// typedef Handle<Value> (*CALLBACK)(int);
 
 
-Handle<Value> Plus(const Arguments& args) {
-    return args[0];
-} 
-
-// extern "C" void unmanaged(Persistent<Context> context, CALLBACK cb) {
-//     HandleScope handle_scope;
-//     Context::Scope context_scope(context);
-
-//     Handle<Object> global = context->Global();
-
-//     // Handle<ObjectTemplate> global = ObjectTemplate::New();
-    
-//     global->Set(String::New("apply_fs"), FunctionTemplate::New(Plus)->GetFunction());
-    
-// }
-
-extern "C" void unmanaged(Persistent<Context> context, CALLBACK cb) {
+extern "C" void register_function(Persistent<Context> context, CALLBACK cb) {
     HandleScope handle_scope;
     Context::Scope context_scope(context);
 
     Handle<Object> global = context->Global();
     
-    global->Set(String::New("fsharp"), FunctionTemplate::New(cb)->GetFunction());
-
-    Handle<String> source = String::New("fsharp(1)");
-    Handle<Script> script = Script::Compile(source);
-    Handle<Value> result = script->Run();
-    print_result(context, result);
+    global->Set(String::New("apply_fsharp"), FunctionTemplate::New(cb)->GetFunction());
+    // up to here
+    // Handle<String> source = String::New("apply_fsharp(10000, 2)");
+    // Handle<Script> script = Script::Compile(source);
+    // Handle<Value> result = script->Run();
+    // print_result(context, result);
 }
 
+
+extern "C" int  arguments_length(Persistent<Context> context, const Arguments& args) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    return args.Length();
+}
+
+extern "C" Handle<Value> get_argument(Persistent<Context> context, const Arguments& args, int index) {
+    HandleScope handle_scope;
+
+    Context::Scope context_scope(context);
+
+    Handle<Value> local_result = args[index];
+
+    Persistent<Value> result = Persistent<Value>::New(local_result);
+    return result;    
+}
+
+extern "C" Handle<Value> make_FLump(Persistent<Context> context, int pointer) {
+    execute_string(context, "function FLump(pointer) { this.pointer = pointer; }");
+
+    const char* s = "var a = new FLump(%d); a";
+    cout << "This is the pointer " << pointer << endl;
+    char script[100];
+    int n = sprintf(script, s, pointer);
+    if (n < 0) {
+	cerr << "something went wrong when creating an FLump in JavaScript" << endl;
+	return Undefined();
+    }
+    return execute_string(context, script);
+}
+
+
+extern "C" int get_pointer_lump(Persistent<Context> context, Handle<Object> lump) {
+    HandleScope handle_scope;
+
+    Context::Scope context_scope(context);
+
+    return lump->Get(String::New("pointer"))->Uint32Value();
+    
+}
