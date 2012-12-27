@@ -6,6 +6,7 @@ using namespace std;
 
 
 extern "C" void disposeHandle(Persistent<String> prst) {
+    
     prst.Dispose();
     prst.Clear();
 }
