@@ -5,12 +5,12 @@ using namespace v8;
 using namespace std;
 
 
-extern "C" void dispose_handle(Persistent<String> prst) {
+extern "C" void disposeHandle(Persistent<String> prst) {
     prst.Dispose();
     prst.Clear();
 }
 
-extern "C" Persistent<Context> get_context() {    
+extern "C" Persistent<Context> createContext() {
     return Context::New();
 }
 
@@ -41,9 +41,18 @@ extern "C" Handle<Value> execute_string(Persistent<Context> context, const char*
     // Compile it
     Handle<Script> script = Script::Compile(source);
 
+    // try-catch handler
+    TryCatch trycatch;    
     // Run it
     Persistent<Value> result = Persistent<Value>::New(script->Run());
 
+    // Script->Run() returns an empty handle if the code threw an exception
+    if (result.IsEmpty()) {
+	Handle<Value> exception = trycatch.Exception();
+	String::AsciiValue exception_str(exception);
+	
+    }
+    
     return result;
 }
 
@@ -71,7 +80,7 @@ extern "C" Handle<Value> create_function(Persistent<Context> context,
     Handle<Value> value = global->Get(String::New(name));
 
     Handle<Function> func = v8::Handle<Function>::Cast(value);
-    func->SetName(String::New("add"));
+    func->SetName(String::New(name));
 
     Persistent<Function> persistent_func = Persistent<Function>::New(func);
     return persistent_func;
@@ -93,17 +102,17 @@ extern "C" Handle<Value> apply_function(Persistent<Context> context,
 }
 
 extern "C" Handle<Value> apply_function_arr(Persistent<Context> context,
-                                        Handle<Function> func,
-                                        Handle<Value>* arg) {
+					    Handle<Function> func, int argc,
+					    Handle<Value>* argv) {
     HandleScope handle_scope;
 
     Context::Scope context_scope(context);
 
-    Handle<Value> result = func->Call(context->Global(), 2, arg);
+    Handle<Value> result = func->Call(context->Global(), argc, argv);
 
     Persistent<Value> js_result = Persistent<Value>::New(result);
     
-    print_result(context, result);    
+    // print_result(context, result);    
     return js_result;
 }
 
@@ -118,11 +127,6 @@ extern "C" void register_function(Persistent<Context> context, CALLBACK cb) {
     Handle<Object> global = context->Global();
     
     global->Set(String::New("apply_fsharp"), FunctionTemplate::New(cb)->GetFunction());
-    // up to here
-    // Handle<String> source = String::New("apply_fsharp(10000, 2)");
-    // Handle<Script> script = Script::Compile(source);
-    // Handle<Value> result = script->Run();
-    // print_result(context, result);
 }
 
 
@@ -145,9 +149,7 @@ extern "C" Handle<Value> get_argument(Persistent<Context> context, const Argumen
 
 extern "C" Handle<Value> make_FLump(Persistent<Context> context, int pointer) {
     execute_string(context, "function FLump(pointer) { this.pointer = pointer; }");
-
-    const char* s = "var a = new FLump(%d); a";
-    cout << "This is the pointer " << pointer << endl;
+    const char* s = "new FLump(%d);";
     char script[100];
     int n = sprintf(script, s, pointer);
     if (n < 0) {
@@ -158,11 +160,19 @@ extern "C" Handle<Value> make_FLump(Persistent<Context> context, int pointer) {
 }
 
 
-extern "C" int get_pointer_lump(Persistent<Context> context, Handle<Object> lump) {
-    HandleScope handle_scope;
-
-    Context::Scope context_scope(context);
-
-    return lump->Get(String::New("pointer"))->Uint32Value();
-    
+/*
+ * Returns -1 if lump is not an FLump object
+ * otherwise it returns the Pointer attribute in lump
+ *
+ */
+extern "C" int get_pointer_lump(Handle<Value> lump) {
+    int result = -1;
+    if (lump->IsObject()) {
+	Handle<Object> lump_as_object = Handle<Object>::Cast(lump);
+	Handle<Value> pointer = lump_as_object->Get(String::New("pointer"));
+	if (!pointer.IsEmpty()) {
+	    result = pointer->Uint32Value();
+	}	
+    }
+    return result;
 }
