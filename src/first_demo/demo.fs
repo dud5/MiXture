@@ -1,4 +1,4 @@
-module Demo
+namespace JSEmbedding
 
 open System.Runtime.InteropServices
 open System
@@ -54,37 +54,42 @@ module LumpEmbedding =
         abstract Native: bool
         abstract Pointer: IdType
         abstract Print: unit
-
-    let fs_values = new Dictionary<IdType, Lump>()
-    let mutable pointer_counter = 0
-
-    let nextPointerCounter () =
-        pointer_counter <- pointer_counter + 1
     
-    type 'a FSLump(value : 'a) as this =
-        let current_count = new IdType(pointer_counter)
-        do
-            // pointer_counter <- pointer_counter + 1
-            nextPointerCounter()
-            fs_values.Add(current_count, this :> Lump)
+    type FSValuesStorage () =
+        let _dict = new Dictionary<IdType, Lump>()
+        // only allow positive integers
+        let mutable _pointer_counter = 0
+        let nextPointerCounter () =
+            _pointer_counter <- _pointer_counter + 1
+                    
+        member this.Dict = _dict
+        member this.Insert (lump: FSLump<_>) =
+            this.Dict.Add(IdType(_pointer_counter), lump)
+            nextPointerCounter ()
+            // _pointer_counter
+        member this.CurrentPointer = _pointer_counter
+        member this.Lookup pointer = this.Dict.[pointer]
+
     
+    and 'a FSLump(value : 'a, fscontext: FSValuesStorage) as this =
+        let _fscontext = fscontext
+        let _pointer = _fscontext.CurrentPointer
+        do _fscontext.Insert(this)
         member this.Value = value
+
         interface Lump with
             member this.Native = true
-            member this.Pointer = current_count
+            member this.Pointer = IdType(_pointer)
             member this.Print = printf "%A\n" this
     
-
+    let fscontext = new FSValuesStorage()
 
     type JSLump(pointer: nativeint) =
-
         let mutable disposed = false
         let cleanup disposing =
             printf "cleanup!\n"
-            // this.Print
             if not disposed then
                 disposed <- true
-
                 if disposing then
                     printf "disposing is true!\n"
                 V8.disposeHandle(pointer)
@@ -148,61 +153,59 @@ module LumpEmbedding =
     
         with
             | :? System.IndexOutOfRangeException -> false
-        
-    
-    // This function takes two Lumps: a function (which will be an FSLump)
-    // and an argument (it could be a JSLump or FSLump). It returns the result as an
-    // FSLump upcasted to a Lump
-    let eval (func: Lump) (arg: Lump)  =
-        if not func.Native then failwith("the function is not an FSLump")
-    
-        // check func is a function
-        let generic_func = typedefof<Microsoft.FSharp.Core.FSharpFunc<_,_>>
-        let is_function_okay = check_function_type func
-    
-        if not is_function_okay then failwith("the first argument doesn't contain a function inside the FSLump or the function is not appropriate for the arguments it was called with")
-
-
-        // get f as object
-        let f = get_fslump_value func
-        printf "eval called once\n"
-    
-        // if the argument is a FSLump, extract its value as an object,
-        // otherwise box the JSLump into an object
-        let a = if arg.Native then (get_fslump_value arg) else box(arg)
-    
-    
-        // the type that fun takes in
-        let in_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[0]
-        // the type that fun returns
-        // first genericarguments is the type of Lump that func is
-        // second generic arguments is the input type (0) and return type of the function (1)
-        let return_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[1]
-    
-        // the type of arg
-        let actual_in_type =
-            if arg.Native then arg.GetType().GetGenericArguments().[0]
-            else arg.GetType()
-        
-        // type mismatch
-        if in_type <> actual_in_type then failwith("type mismatch")
-    
-        let result = apply_func f a
             
-        
-        let generic_lump = typedefof<FSLump<_>>
-        // Type of the FSLump<return_type>
-        let return_lump_type = generic_lump.MakeGenericType(return_type)
-        let return_constructor = return_lump_type.GetConstructors().[0]
-        
-        // construct FSLump<return_type>(result)
-        let return_lump = return_constructor.Invoke([| result |])
-        return_lump :> Lump
-    
-    
-    // same as eval but works on lists of arguments
     // since func can be a curried function, it acts as an accumulator argument
     let rec eval_array (func: Lump) (arg: Lump list) =
+
+        // This function takes two Lumps: a function (which will be an FSLump)
+        // and an argument (it could be a JSLump or FSLump). It returns the result as an
+        // FSLump upcasted to a Lump
+        let eval (func: Lump) (arg: Lump) =
+            if not func.Native then failwith("the function is not an FSLump")
+    
+            // check func is a function
+            let generic_func = typedefof<Microsoft.FSharp.Core.FSharpFunc<_,_>>
+            let is_function_okay = check_function_type func
+    
+            if not is_function_okay then failwith("the first argument doesn't contain a function inside the FSLump or the function is not appropriate for the arguments it was called with")
+
+            // get f as object
+            let f = get_fslump_value func
+            printf "eval called once\n"
+    
+            // if the argument is a FSLump, extract its value as an object,
+            // otherwise box the JSLump into an object
+            let a = if arg.Native then (get_fslump_value arg) else box(arg)
+    
+    
+            // the type that fun takes in
+            let in_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[0]
+            // the type that fun returns
+            // first genericarguments is the type of Lump that func is
+            // second generic arguments is the input type (0) and return type of the function (1)
+            let return_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[1]
+    
+            // the type of arg
+            let actual_in_type =
+                if arg.Native then arg.GetType().GetGenericArguments().[0]
+                else arg.GetType()
+        
+            // type mismatch
+            if in_type <> actual_in_type then failwith("type mismatch")
+    
+            let result = apply_func f a
+            
+        
+            let generic_lump = typedefof<FSLump<_>>
+            // Type of the FSLump<return_type>
+            let return_lump_type = generic_lump.MakeGenericType(return_type)
+            let return_constructor = return_lump_type.GetConstructors().[0]
+            
+            // construct FSLump<return_type>(result)
+            let return_lump = return_constructor.Invoke([| result; fscontext |])
+            return_lump :?> Lump
+
+
         match arg with
             | x::xs -> eval_array (eval func x) xs
             | [] -> func
@@ -231,18 +234,18 @@ module LumpEmbedding =
         // a FSLump
         let extract_fslump (arg: JSLump) =
             let index = IdType(V8.get_pointer_lump((arg :> Lump).Pointer))
-            fs_values.[index]
+            fscontext.Lookup index
 
-        // process_arg takes an argument
+        // process_arg returns the FSLump (as a Lump) that JSLump contains as an FLump JavaScript object or the argument upcasted as a Lump if it's not an FLump object
         let process_arg (arg: JSLump) =
             let lumpy_arg = arg :> Lump
             if (V8.get_pointer_lump(lumpy_arg.Pointer)) = -1 then lumpy_arg
             else extract_fslump(arg)
-    
+
         let evaluator context args =
             // the JSLumps that contain a pointer to a FSLump are processed into that FSLump
             let processed_args = args |> get_all_JS_arguments JSLump.Context |> Array.map process_arg
-            printf "these are processed_args %A\n" (Array.toList processed_args)
+            printf "these are processed_args %A\n" <| Array.toList processed_args
             let result = eval_array (processed_args.[0]) (Array.toList (processed_args.[1..]))
             printf "this is the result %A\n" <| get_fslump_value(result)
             // return the pointer to a FLump object (in JavaScript)
@@ -273,8 +276,9 @@ module LumpEmbedding =
             let arg_pointers = Array.map (lumpify context) args
             new JSLump(V8.apply_function_arr(context, (func:>Lump).Pointer, Array.length args, arg_pointers))
 
-        // TODO: get rid of this
+        // TODO: get rid of this (moving it to the finalizer of JSLump)
         let dispose_handle handle =
             match handle with
                 | JS(pointer) -> V8.disposeHandle(pointer)
                 | _ -> failwith "disposeHandle only implemented for JSLump"
+
