@@ -4,8 +4,8 @@ open System.Runtime.InteropServices
 open System
 open System.Collections.Generic
 open Microsoft.FSharp.NativeInterop
+open Microsoft.FSharp.Reflection
 
-type Void2 = delegate of nativeint -> nativeint
 type FSharpEvaluator = delegate of nativeint -> nativeint
 
 module V8 =
@@ -134,25 +134,6 @@ module LumpEmbedding =
     let get_fslump_value (l:Lump) =
         l.GetType().GetProperty("Value").GetValue(l, null)
         
-    
-    let check_function_type (func: Lump) =
-        // check func is a function
-        let generic_func = typedefof<Microsoft.FSharp.Core.FSharpFunc<_,_>>
-        try
-            // the type that fun takes in
-            let in_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[0]
-                // the type that fun returns
-            // first genericarguments is the type of Lump that func is
-            // second generic arguments is the input type (0) and return type of the function (1)
-            let return_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[1]
-            // first genericarguments is the type of Lump that func is
-            // second generic arguments is the input type (0) and return type of the function (1)
-            let return_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[1]
-            let supposed_func_type = generic_func.MakeGenericType(in_type, return_type)
-            func.GetType().GetGenericArguments().[0] = supposed_func_type
-    
-        with
-            | :? System.IndexOutOfRangeException -> false
             
     // since func can be a curried function, it acts as an accumulator argument
     let rec eval_array (func: Lump) (arg: Lump list) =
@@ -165,40 +146,35 @@ module LumpEmbedding =
     
             // check func is a function
             let generic_func = typedefof<Microsoft.FSharp.Core.FSharpFunc<_,_>>
-            let is_function_okay = check_function_type func
+            let is_function_okay = FSharpType.IsFunction (func.GetType().GetGenericArguments().[0])
     
             if not is_function_okay then failwith("the first argument doesn't contain a function inside the FSLump or the function is not appropriate for the arguments it was called with")
 
-            // get f as object
-            let f = get_fslump_value func
-            printf "eval called once\n"
     
-            // if the argument is a FSLump, extract its value as an object,
-            // otherwise box the JSLump into an object
-            let a = if arg.Native then (get_fslump_value arg) else box(arg)
-    
-    
-            // the type that fun takes in
-            let in_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[0]
-            // the type that fun returns
-            // first genericarguments is the type of Lump that func is
-            // second generic arguments is the input type (0) and return type of the function (1)
-            let return_type = func.GetType().GetGenericArguments().[0].GetGenericArguments().[1]
+            // the domain and range of func
+            let (domain, range) = func.GetType().GetGenericArguments().[0] |> FSharpType.GetFunctionElements
     
             // the type of arg
             let actual_in_type =
+                // if an FSLump
                 if arg.Native then arg.GetType().GetGenericArguments().[0]
                 else arg.GetType()
         
             // type mismatch
-            if in_type <> actual_in_type then failwith("type mismatch")
-    
+            if domain <> actual_in_type then failwith("type mismatch")
+
+            // get f as object
+            let f = get_fslump_value func
+            printf "eval called once\n"
+            // if the argument is a FSLump, extract its value as an object,
+            // otherwise box the JSLump into an object
+            let a = if arg.Native then (get_fslump_value arg) else box(arg)
+
             let result = apply_func f a
-            
         
             let generic_lump = typedefof<FSLump<_>>
             // Type of the FSLump<return_type>
-            let return_lump_type = generic_lump.MakeGenericType(return_type)
+            let return_lump_type = generic_lump.MakeGenericType(range)
             let return_constructor = return_lump_type.GetConstructors().[0]
             
             // construct FSLump<return_type>(result)
