@@ -1,50 +1,9 @@
 namespace JSEmbedding
 
-open System.Runtime.InteropServices
 open System
 open System.Collections.Generic
 open Microsoft.FSharp.NativeInterop
 open Microsoft.FSharp.Reflection
-
-type FSharpEvaluator = delegate of nativeint -> nativeint
-
-module V8 =
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern nativeint create_function(nativeint, string, string)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern nativeint apply_function(nativeint, nativeint, nativeint)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    // for passing arrays, see
-    // http://stackoverflow.com/questions/12622160/from-c-sharp-to-f-pinned-array-and-stringbuilder-in-external-function-called-f
-    extern nativeint apply_function_arr(nativeint, nativeint, int, nativeint[])
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern nativeint execute_string(nativeint, string)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern void print_result(nativeint, nativeint)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern void print_string(string)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern nativeint createContext()
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern void disposeHandle(nativeint)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern void register_function(nativeint, FSharpEvaluator)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern nativeint get_argument(nativeint, nativeint, int)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern int arguments_length(nativeint, nativeint)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern nativeint make_FLump(nativeint, nativeint)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern int get_pointer_lump(nativeint)
-
-// // Use as dummies for the V8 module
-// module V8 =
-//   let createContext () = ""
-//   let execute_string(a,b) = nativeint(3)
-//   let print_result(a,b) = ()
-//   let disposeHandle(p) = ()
-
 
 module LumpEmbedding =
 
@@ -92,10 +51,10 @@ module LumpEmbedding =
                 disposed <- true
                 if disposing then
                     printf "disposing is true!\n"
-                V8.disposeHandle(pointer)
+                JSEngine.disposeHandle(pointer)
                 ()
 
-        static let _context = V8.createContext()
+        static let _context = JSEngine.createContext()
 
 
         // override this.Finalize() =
@@ -104,11 +63,11 @@ module LumpEmbedding =
         
         static member Context = _context
 
-        member this.Print = V8.print_result(JSLump.Context, pointer)
+        member this.Print = JSEngine.print_result(JSLump.Context, pointer)
 
         // constructor initialized by executing some code in a string
         new (code) =
-            let pointer = V8.execute_string(JSLump.Context, code)
+            let pointer = JSEngine.execute_string(JSLump.Context, code)
             new JSLump(pointer)
 
         interface Lump with
@@ -196,11 +155,11 @@ module LumpEmbedding =
     module JS =
         // might refactor this to return the pointer itself
         let get_JS_argument context args index =
-            new JSLump(V8.get_argument(context, args, index))
+            new JSLump(JSEngine.get_argument(context, args, index))
     
         // is there an easier way of doing this in C++ with V8?
         let get_all_JS_arguments context args =
-            let size = V8.arguments_length(context, args)
+            let size = JSEngine.arguments_length(context, args)
             let init = get_JS_argument context args
             Array.init size init
     
@@ -208,13 +167,13 @@ module LumpEmbedding =
         // that arg contains, where arg is a JavaScript object wrapping
         // a FSLump
         let extract_fslump (arg: JSLump) =
-            let index = IdType(V8.get_pointer_lump((arg :> Lump).Pointer))
+            let index = IdType(JSEngine.get_pointer_lump((arg :> Lump).Pointer))
             fscontext.Lookup index
 
         // process_arg returns the FSLump (as a Lump) that JSLump contains as an FLump JavaScript object or the argument upcasted as a Lump if it's not an FLump object
         let process_arg (arg: JSLump) =
             let lumpy_arg = arg :> Lump
-            if (V8.get_pointer_lump(lumpy_arg.Pointer)) = -1 then lumpy_arg
+            if (JSEngine.get_pointer_lump(lumpy_arg.Pointer)) = -1 then lumpy_arg
             else extract_fslump(arg)
 
         let evaluator context args =
@@ -228,35 +187,22 @@ module LumpEmbedding =
             // containing the pointer to the index in fs_values of the
             // result
             // TODO substitute this to a simple new JSLump(new FLump(result.Pointer))
-            V8.make_FLump(context, result.Pointer)
-
-        // SUPERSEEDED BY apply_JS_func_arr
-        // DELETE ME
-        let apply_JS_func context func arg =
-            match (func, arg) with
-                | (JS(p1), JS(p2)) -> new JSLump(V8.apply_function(context, p1, p2))
-                | (JS(p1), FS(p2)) ->
-                    let flump_in_js = V8.make_FLump(context, p2)
-                    new JSLump(V8.apply_function(context, p1, flump_in_js))
-                // do we really want this?
-                | _ -> failwith("blah")
-                // | (FS(p1), FS(p2)) -> JSLump(evaluator_ff p1 p2) 
-                // | (FS(p1), JS(p2)) -> JSLump(evaluator_fj p1 p2)
+            JSEngine.make_FLump(context, result.Pointer)
     
         // this function, given a Lump, returns the Pointer if it's a
         // JSLump, and creates a FLump JS object if the lump is a FSLump
         let lumpify context lump =
             match lump with
                 | JS(p) -> p
-                | FS(p) -> V8.make_FLump(context, p)
+                | FS(p) -> JSEngine.make_FLump(context, p)
 
         let apply_JS_func_arr context func args =
             let arg_pointers = Array.map (lumpify context) args
-            new JSLump(V8.apply_function_arr(context, (func:>Lump).Pointer, Array.length args, arg_pointers))
+            new JSLump(JSEngine.apply_function_arr(context, (func:>Lump).Pointer, Array.length args, arg_pointers))
 
         // TODO: get rid of this (moving it to the finalizer of JSLump)
         let dispose_handle handle =
             match handle with
-                | JS(pointer) -> V8.disposeHandle(pointer)
+                | JS(pointer) -> JSEngine.disposeHandle(pointer)
                 | _ -> failwith "disposeHandle only implemented for JSLump"
 

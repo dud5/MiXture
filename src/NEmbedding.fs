@@ -7,8 +7,6 @@ type FSFunction = delegate of nativeint -> nativeint
 
 module V8 =
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern nativeint create_function(nativeint, string, string)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
     // for passing arrays, see
     // http://stackoverflow.com/questions/12622160/from-c-sharp-to-f-pinned-array-and-stringbuilder-in-external-function-called-f
     extern nativeint apply_function_arr(nativeint, nativeint, int, nativeint[])
@@ -26,10 +24,6 @@ module V8 =
     extern nativeint get_argument(nativeint, nativeint, int)
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
     extern int arguments_length(nativeint, nativeint)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern nativeint make_FLump(nativeint, nativeint)
-    [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern int get_pointer_lump(nativeint)
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
     extern float extractFloat(nativeint)
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
@@ -55,7 +49,8 @@ module V8 =
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
     extern bool isFunction(nativeint)
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-    extern void hello(System.Text.StringBuilder)
+    extern void registerValue(nativeint, string, nativeint)
+
 
 // Use as dummies for the V8 module
 // module V8 =
@@ -80,27 +75,25 @@ type JSValue = nativeint
 module JS =
     // might refactor this to return the pointer itself
     let get_JS_argument context args index =
-        V8.get_argument(context, args, index)
+        JSEngine.get_argument(context, args, index)
     
     // is there an easier way of doing this in C++ with V8?
     let get_all_JS_arguments context args =
-        let size = V8.arguments_length(context, args)
+        let size = JSEngine.arguments_length(context, args)
         let init = get_JS_argument context args
         Array.init size init
-
 
 
 let context = V8.createContext()
 
 
 let (|Boolean|_|) (b:JSValue) =
-    if V8.isBoolean(b) then Some(V8.extractBoolean(b))
+    if JSEngine.isBoolean(b) then Some(JSEngine.extractBoolean(b))
     else None
 
 let (|Number|_|) (n:JSValue) =
     if V8.isNumber(n) then Some(V8.extractFloat(n))
     else None
-
 
 let getString (s:JSValue) =
     let sb = new System.Text.StringBuilder(15)
@@ -230,33 +223,13 @@ let main() =
     ////////////////////////////////////
 
 
-
-
-
     let add2 x :float= x + 1.0
     let jadd = embed add2
-    let result =
-        match jadd with
-            | Function f -> f [embed 31.1]
-            | _ -> failwith "we"
-    let fresult: float = project result
-    printf "this is fresult: %f\n" fresult
+    V8.registerValue(context, "addd", jadd)
+    let r = V8.execute_string(context, "addd(-10.0)")
+    let f:float = project r
+    printf "%f\n" f
+    // V8.print_result(context, r)
     printf "Done\n"
-    
-    // let r: float = add1 41.1
-    // printf "this is r: %f\n" r
-    // echo p
-    // let s = V8.extractString(p)
-    // printf "this is s %s\n" s
-    // let sb = new System.Text.StringBuilder(15)
-    // V8.hello(sb)
-    // let s = sb.ToString()
-    // printf "this is s: %s\n" s
-    // let three = float.embed(3.0)
-    // let fthree = float.project(three)
-    // printf "this is the fsharp value %f\n" fthree
-    // V8.print_result(context, three)
-    // V8.echo("Hello from f@")
-
 do
     main()

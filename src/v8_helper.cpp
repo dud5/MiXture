@@ -246,3 +246,12 @@ extern "C" bool isString(Handle<Value> n) {
 extern "C" bool isFunction(Handle<Value> n) {
     return n->IsFunction();
 }
+
+extern "C" void registerValue(Persistent<Context> context, const char* name, Handle<Value> val) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+
+    Handle<Object> global = context->Global();
+    
+    global->Set(String::New(name), val);
+}
