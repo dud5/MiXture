@@ -38,7 +38,7 @@ module V8 =
     [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
     extern int get_pointer_lump(nativeint)
 
-// Use as dummies for the V8 module
+// // Use as dummies for the V8 module
 // module V8 =
 //   let createContext () = ""
 //   let execute_string(a,b) = nativeint(3)
@@ -111,7 +111,6 @@ module LumpEmbedding =
             let pointer = V8.execute_string(JSLump.Context, code)
             new JSLump(pointer)
 
-
         interface Lump with
             member this.Native = false
             member this.Pointer = pointer
@@ -121,7 +120,7 @@ module LumpEmbedding =
             member this.Dispose() =
                 cleanup(true)
                 GC.SuppressFinalize(this)
-    
+
     
     let apply_func f arg =
         f.GetType().GetMethod("Invoke", [| arg.GetType() |]).Invoke(f, [| arg |])
@@ -222,6 +221,7 @@ module LumpEmbedding =
             // the JSLumps that contain a pointer to a FSLump are processed into that FSLump
             let processed_args = args |> get_all_JS_arguments JSLump.Context |> Array.map process_arg
             printf "these are processed_args %A\n" <| Array.toList processed_args
+            // the first argument is the function
             let result = eval_array (processed_args.[0]) (Array.toList (processed_args.[1..]))
             printf "this is the result %A\n" <| get_fslump_value(result)
             // return the pointer to a FLump object (in JavaScript)
@@ -230,6 +230,8 @@ module LumpEmbedding =
             // TODO substitute this to a simple new JSLump(new FLump(result.Pointer))
             V8.make_FLump(context, result.Pointer)
 
+        // SUPERSEEDED BY apply_JS_func_arr
+        // DELETE ME
         let apply_JS_func context func arg =
             match (func, arg) with
                 | (JS(p1), JS(p2)) -> new JSLump(V8.apply_function(context, p1, p2))

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <v8.h>
+#include <string.h>
 
 using namespace v8;
 using namespace std;
@@ -131,7 +132,7 @@ extern "C" void register_function(Persistent<Context> context, CALLBACK cb) {
 }
 
 
-extern "C" int  arguments_length(Persistent<Context> context, const Arguments& args) {
+extern "C" int arguments_length(Persistent<Context> context, const Arguments& args) {
     HandleScope handle_scope;
     Context::Scope context_scope(context);
     return args.Length();
@@ -176,4 +177,73 @@ extern "C" int get_pointer_lump(Handle<Value> lump) {
 	}	
     }
     return result;
+}
+
+
+// ______________________________________________________________
+// NATURAL EMBEDDING
+// ______________________________________________________________
+
+
+extern "C" double extractFloat(Handle<Number> x) {
+    return x->Value();
+}
+
+extern "C" void extractString(Handle<String> s, char* dest) {
+    String::Utf8Value str(s);
+    strncpy(dest, ToCString(str), 15);
+
+}
+
+extern "C" bool extractBoolean(Handle<Boolean> b) {
+    return b->Value();
+}
+
+extern "C" Handle<Value> makeFloat(Persistent<Context> context, double x) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    Persistent<Value> result = Persistent<Value>::New(Number::New(x));
+    return result;
+}
+
+extern "C" Handle<Value> makeString(Persistent<Context> context, const char* s) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    Persistent<Value> result = Persistent<Value>::New(String::New(s));
+    return result;
+}
+
+extern "C" Handle<Value> makeBoolean(Persistent<Context> context, bool b) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    Persistent<Value> result = Persistent<Value>::New(Boolean::New(b));
+    return result;
+}
+
+extern "C" Handle<Value> makeFunction(Persistent<Context> context, CALLBACK cb) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    Persistent<Value> result = Persistent<Value>::New(FunctionTemplate::New(cb)->GetFunction());
+    return result;
+}
+
+extern "C" void echo(const char* str) {
+    cout << "This is a string from F# " << str << endl;
+}
+
+
+extern "C" bool isBoolean(Handle<Value> b) {
+    return b->IsBoolean();
+}
+
+
+extern "C" bool isNumber(Handle<Value> n) {
+    return n->IsNumber();
+}
+
+extern "C" bool isString(Handle<Value> n) {
+    return n->IsString();
+}
+extern "C" bool isFunction(Handle<Value> n) {
+    return n->IsFunction();
 }
