@@ -236,7 +236,6 @@ extern "C" bool isBoolean(Handle<Value> b) {
     return b->IsBoolean();
 }
 
-
 extern "C" bool isNumber(Handle<Value> n) {
     return n->IsNumber();
 }

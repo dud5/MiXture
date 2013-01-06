@@ -78,9 +78,16 @@ module V8 =
 type JSValue = nativeint
 
 module JS =
+    // might refactor this to return the pointer itself
+    let get_JS_argument context args index =
+        V8.get_argument(context, args, index)
+    
+    // is there an easier way of doing this in C++ with V8?
     let get_all_JS_arguments context args =
-        let init x = JSValue(3)
-        Array.init 1 init
+        let size = V8.arguments_length(context, args)
+        let init = get_JS_argument context args
+        Array.init size init
+
 
 
 let context = V8.createContext()
@@ -118,7 +125,6 @@ type ('a, 'b) ep = { embed : 'a -> 'b; project: 'b -> 'a }
 
 let float =
     { embed = fun x -> V8.makeFloat(context, x);
-    // { embed = fun x -> nativeint(3);
       project = function Number x -> x | _ -> failwith "tried to project a nonfloat" }
 
 let string =
@@ -141,7 +147,6 @@ let func =
           V8.makeFunction(context, new FSFunction(nativef));
       // don't need project
       project = fun r -> fun x -> x }
-
 
 /// <summary>Embeds a value into an <c>JSvalue</c>, using type information provided
 /// <param name="ty">The <c>Type</c> value that specifies the type of the value being embedded</param>
@@ -205,26 +210,37 @@ let rec echo p =
         | String s -> printf "%s: String\n" s
         | Function f ->
             printf "it's a function!\n"
-            let n = embed 3.0;
-            printf "i've embedded 3.0\n"
+            let n = embed 41.1;
+            printf "i've embedded 41.1\n"
             // let n = V8.execute_string(context, "3")
             let result = f [n]
             printf "i've applied the function\n"
-            V8.print_result(context, result)
             echo result
         | _ -> printf "something else\n"
 
 
 let main() =
-    let p = V8.execute_string(context, "(function(a) {return a+38.1;})")
-    let add1 : float -> float = project p
-    let r = add1 2.9
-    printf "this is r+1 %f\n" (r+1.0)
+    // let p = V8.execute_string(context, "(function(a) {return a+38.1;})")
+    // let add1 : float -> float = project p
+    // let r = add1 2.9
+    // printf "this is r %f\n" r
+
+    // don't optimize context out!
+    printf "this is context: %A\n" context
+    ////////////////////////////////////
+
+
+
 
 
     let add2 x :float= x + 1.0
     let jadd = embed add2
-    echo jadd
+    let result =
+        match jadd with
+            | Function f -> f [embed 31.1]
+            | _ -> failwith "we"
+    let fresult: float = project result
+    printf "this is fresult: %f\n" fresult
     printf "Done\n"
     
     // let r: float = add1 41.1
@@ -244,9 +260,3 @@ let main() =
 
 do
     main()
-
-
-
-let test (a:obj) =
-    printf "this is a's type: %A\n" (a.GetType())
-    a.GetType().GetMethod("Invoke", [|typeof<int>|]).Invoke(a, [| (box 1) |])
