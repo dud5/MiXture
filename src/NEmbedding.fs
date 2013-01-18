@@ -104,31 +104,6 @@ let func =
       project = fun r x -> failwith "Cannot call project for 'func'" }
 
 
-
-
-// let list =
-//     { embed = embed_ienumerable ;
-//       project = array.project << Array.toList }
-
-// let array =
-//     { embed = embed_ienumerable ;
-//       // might need to pass some type information to project
-//       project = fun (jarr: JSValue) ->
-//           let length = JSEngine.getArrayLength(context, jarr)
-//           let farr: JSValue array = Array.zeroCreate length
-//           JSEngine.extractArray(context, jarr, length, farr)
-//           Array.map project farr }
-
-// let tuples =
-//     { embed ;
-//       project }
-
-// let records =
-//     { embed ;
-//       project }
-
-
-
 // let generate_JS_object x =
 
 
@@ -166,7 +141,10 @@ let rec embed_reflection ty (x:obj) =
 /// <summary>Embeds a value into an <c>JSvalue</c>
 /// <param name="x">The value that is being embedded</param>
 /// <return>A value of type <c>JSValue</c> which is the JavaScript equivalent of <c>x</c></return>
+// this fails with null (gettype)
 and embed x : JSValue = embed_reflection (x.GetType()) x
+
+// and embed (x:'T) : JSValue = embed_reflection (typeof<'T>) x
 
 and project_func ty (f:JSValue list -> JSValue) : obj =
     let range = FSharpType.GetFunctionElements ty |> snd
@@ -199,8 +177,12 @@ and project_reflection ty (x:JSValue) : obj =
             | Function f -> project_func ty f
             | _ -> failwith "trying to project a nonfunction"
 
-    elif ty.IsGenericType && ty.GetGenericTypeDefinition() = typedefof<list<_>> then project_list(x) |> box
+    elif ty.IsGenericType && ty.GetGenericTypeDefinition() = typedefof<list<_>> then
+        let el_ty = ty.GetGenericArguments().[0]
+        box <| project_list el_ty x
+        
     elif ty.IsArray then
+        // GetMethod.MageGeneric.Invoke
         let el_ty = ty.GetElementType()
         (project_array el_ty x) |> box
 
@@ -246,23 +228,27 @@ and project_array ty (jarr: JSValue) =
     let farr: JSValue array = Array.zeroCreate length
     JSEngine.extractArray(context, jarr, length, farr)
     // TODO: get rid of float
-    Array.map ((project_reflection ty) >> unbox<float>) farr
+    let result = System.Array.CreateInstance(ty, length)
+    Array.iteri (fun index el -> result.SetValue(project_hack ty el, index)) farr
+    result
 
 
 // TODO: how to specify the type of list I want from a System.Type?
 // temporarily using floats just to test it works
-and project_list : JSValue -> float list = (project_array typeof<obj>) >> Array.toList
+// and project_list : JSValue -> float list = (project_array typeof<obj>) >> Array.toList
+// and project_list ty = (project_array ty ) >> Array.toList
+and project_list ty : JSValue -> float list = fun x -> [1.1]
 // and project_list<'T> : JSValue -> 'T list = (project_array typeof<'T>) >> Array.toList<'T>
 
-let array =
+let array ty =
     { embed = embed_ienumerable ;
       // might need to pass some type information to project
       // TODO get rid of float, is this even useful?
-      project = project_array typeof<float> }
+      project = project_array ty }
 
-let list =
+let list ty=
     { embed = embed_ienumerable ;
-      project = project_list }
+      project = project_list ty}
 
 
 /// <summary>Registers a <c>JSValue</c> in the global object of JavaScript,
@@ -271,7 +257,6 @@ let list =
 let register_values (l: (string * JSValue) list) =
     let register_value (name, value) =
         JSEngine.registerValue(context, name, value)
-
     List.iter register_value l
 
 
@@ -300,23 +285,22 @@ let main() =
     // // don't optimize context out!
     printf "this is context: %A\n" context
 
-    let s = ""
-    let js = embed s
-    JSEngine.print_result(context, js)
-    let fs: string = project js
-    printf "This is s: %s\n" s
-    printf "this is fs: %s\n" fs
-    // let l = [|11.1;22.2;33.3|]
-    // let jl = embed l
-    // JSEngine.registerValue(context, "jl", jl)
-    // let twentytwo = JSEngine.execute_string(context, "jl[1]")
-    // JSEngine.print_result(context, twentytwo)
+    // let s = "^@"
+    // let js = embed s
+    // JSEngine.print_result(context, js)
+    // let fs: string = project js
+    // printf "This is s: %s\n" s
+    // printf "this is fs: %s\n" fs
+    let l = [|11.1;22.2;33.3|]
+    let jl = embed l
+    JSEngine.registerValue(context, "jl", jl)
+    let twentytwo = JSEngine.execute_string(context, "jl[1]")
+    JSEngine.print_result(context, twentytwo)
 
-    // let jar = JSEngine.execute_string(context, "[1.1,2.2,3.3]")
+    let jar = JSEngine.execute_string(context, "[1,2,3]")
 
-    // let ar: float[] = project jar
-    // printf "this is length: %f\n" (ar.[2])
-    // printf "this should be three.three: %f\n" (ar.[2])
+    let ar: int[] = project jar
+    printf "this is ar: %A\n" ar
 
     ////////////////////////////////////
     // let id x = x
