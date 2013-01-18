@@ -189,10 +189,18 @@ extern "C" double extractFloat(Handle<Number> x) {
     return x->Value();
 }
 
+extern "C" int extractInt(Handle<Int32> n) {
+    return n->Value();
+}
+
+extern "C" int stringLength(Handle<String> s) {
+    return s->Length();
+}
+
 extern "C" void extractString(Handle<String> s, char* dest) {
     String::Utf8Value str(s);
-    strncpy(dest, ToCString(str), 15);
-
+    strncpy(dest, ToCString(str), s->Length());
+    dest[s->Length()] = 0;
 }
 
 extern "C" bool extractBoolean(Handle<Boolean> b) {
@@ -227,6 +235,45 @@ extern "C" Handle<Value> makeFunction(Persistent<Context> context, CALLBACK cb) 
     return result;
 }
 
+
+extern "C" Handle<Value> makeArray(Persistent<Context> context, int size, void* array) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    Persistent<Array> result = Persistent<Array>::New(Array::New(size));
+    // Persistent<Value> first = Persistent<Value>::New(String::New("Hello, word"));
+    // result->Set(0,first);
+    return result;
+}
+
+extern "C" void setElementArray(Persistent<Context> context, Handle<Array> array, int index, Handle<Value> element) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    array->Set(index, element);
+}
+
+extern "C" Handle<Value> getElementArray(Persistent<Context> context, Handle<Array> array, int index) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    return array->Get(index);
+}
+
+extern "C" int getArrayLength(Persistent<Context> context, Handle<Array> array) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    return array->Get(String::New("length"))->ToObject()->Uint32Value();
+}
+
+extern "C" void extractArray(Persistent<Context> context,
+				       Handle<Array> array,
+				       int length,
+				       Handle<Value>* result) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    for (int i = 0; i < length; i++) {
+	result[i] = array->Get(i);
+    }
+}
+
 extern "C" void echo(const char* str) {
     cout << "This is a string from F# " << str << endl;
 }
@@ -243,8 +290,26 @@ extern "C" bool isNumber(Handle<Value> n) {
 extern "C" bool isString(Handle<Value> n) {
     return n->IsString();
 }
+
 extern "C" bool isFunction(Handle<Value> n) {
     return n->IsFunction();
+}
+
+extern "C" bool isNull(Handle<Value> n) {
+    return n == Null();
+}
+
+extern "C" bool isUndefined(Handle<Value> n) {
+    // return n->IsUndefined();
+    return n == Undefined();
+}
+
+extern "C" bool isInt32(Handle<Value> n) {
+    return n->IsInt32();
+}
+
+extern "C" bool isArray(Handle<Value> arr) {
+    return arr->IsArray();
 }
 
 extern "C" void registerValue(Persistent<Context> context, const char* name, Handle<Value> val) {

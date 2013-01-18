@@ -49,16 +49,22 @@ extern void register_function(nativeint, FSharpFunction)
 /////// Natural Embedding
 ///////
 // Obtain the F# representation of each type
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern float extractFloat(nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern int extractInt(nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 // see http://stackoverflow.com/questions/5298268/returning-a-string-from-pinvoke
 // for how to return strings from unmanaged code
-extern void extractString(nativeint, System.Text.StringBuilder)
+extern void extractString(nativeint, System.Text.StringBuilder, int)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern bool extractBoolean(nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern int stringLength(nativeint)
+
 
 // Make JavaScript values representing the F# values of each type
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint makeFloat(nativeint, double)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint makeString(nativeint, string)
@@ -67,15 +73,39 @@ extern nativeint makeBoolean(nativeint, bool)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint makeFunction(nativeint, FSharpFunction)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint makeArray(nativeint, int)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern void setElementArray(nativeint, nativeint, int, nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint getElementArray(nativeint, nativeint, int)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern int getArrayLength(nativeint, nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern void extractArray(nativeint, nativeint, int, nativeint[])
+
+
 
 // Check the JavaScript types of pointers
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern bool isBoolean(nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern bool isNumber(nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern bool isInt32(nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern bool isUint32(nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern bool isString(nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern bool isFunction(nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern bool isNull(nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern bool isUndefined(nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern bool isArray(nativeint)
+
+
 
 
 
@@ -88,11 +118,17 @@ extern bool isFunction(nativeint)
 //     let extractFloat(o:JSValue) = 1.2
 //     let extractString(o:JSValue, a:System.Text.StringBuilder) = let l = a.Append("hello") in ()
 //     let extractBoolean(b:JSValue)= true
+//     let extractInt(n:JSValue) = 2
 //     let createContext () = nativeint(2)
 //     let apply_function_arr(a,b,c,d) = nativeint(3)
 //     let isBoolean x = true
 //     let isString x = true
 //     let isNumber x = true
 //     let isFunction x = true
+//     let isInt32 x = true
+//     let isNull x = true
+//     let isUndefined x = true
+//     let isArray x = true
 //     let print_result(a,b) = ()
+
 

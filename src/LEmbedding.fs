@@ -1,4 +1,4 @@
-namespace JSEmbedding
+namespace Mixture
 
 open System
 open System.Collections.Generic
@@ -102,8 +102,7 @@ module LumpEmbedding =
         let eval (func: Lump) (arg: Lump) =
             if not func.Native then failwith("the function is not an FSLump")
     
-            // check func is a function
-            let generic_func = typedefof<Microsoft.FSharp.Core.FSharpFunc<_,_>>
+            // check func contains a function
             let is_function_okay = FSharpType.IsFunction (func.GetType().GetGenericArguments().[0])
     
             if not is_function_okay then failwith("the first argument doesn't contain a function inside the FSLump or the function is not appropriate for the arguments it was called with")
@@ -153,16 +152,6 @@ module LumpEmbedding =
     
     
     module JS =
-        // might refactor this to return the pointer itself
-        let get_JS_argument context args index =
-            new JSLump(JSEngine.get_argument(context, args, index))
-    
-        // is there an easier way of doing this in C++ with V8?
-        let get_all_JS_arguments context args =
-            let size = JSEngine.arguments_length(context, args)
-            let init = get_JS_argument context args
-            Array.init size init
-    
         // auxiliary function used to extract the FSLump in fs_values
         // that arg contains, where arg is a JavaScript object wrapping
         // a FSLump
@@ -176,9 +165,11 @@ module LumpEmbedding =
             if (JSEngine.get_pointer_lump(lumpy_arg.Pointer)) = -1 then lumpy_arg
             else extract_fslump(arg)
 
+        let lumpify (pointer: IdType) = new JSLump(pointer)
+
         let evaluator context args =
             // the JSLumps that contain a pointer to a FSLump are processed into that FSLump
-            let processed_args = args |> get_all_JS_arguments JSLump.Context |> Array.map process_arg
+            let processed_args = args |> JSUtils.get_all_JS_arguments JSLump.Context |> Array.map lumpify |> Array.map process_arg
             printf "these are processed_args %A\n" <| Array.toList processed_args
             // the first argument is the function
             let result = eval_array (processed_args.[0]) (Array.toList (processed_args.[1..]))
@@ -191,13 +182,13 @@ module LumpEmbedding =
     
         // this function, given a Lump, returns the Pointer if it's a
         // JSLump, and creates a FLump JS object if the lump is a FSLump
-        let lumpify context lump =
+        let delumpify context lump =
             match lump with
                 | JS(p) -> p
                 | FS(p) -> JSEngine.make_FLump(context, p)
 
         let apply_JS_func_arr context func args =
-            let arg_pointers = Array.map (lumpify context) args
+            let arg_pointers = Array.map (delumpify context) args
             new JSLump(JSEngine.apply_function_arr(context, (func:>Lump).Pointer, Array.length args, arg_pointers))
 
         // TODO: get rid of this (moving it to the finalizer of JSLump)
