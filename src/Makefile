@@ -7,7 +7,7 @@ FSNAME2 = NEmbedding
 JSENGINE = JSEngineUtils
 JSUTILS = JSUtils
 FSTEST = Tests
-V8PATH = ~/Coding/v8/v8/out/ia32.release/libv8_{base,snapshot}.a
+V8PATH = ~/Coding/new_v8/v8/out/ia32.release/libv8_{base,snapshot}.a
 OBJS = $(CNAME).dylib $(FSNAME).fs
 
 

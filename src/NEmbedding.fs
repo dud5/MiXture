@@ -22,11 +22,11 @@ let (|Number|_|) (n:JSValue) =
     else None
 
 let getString (s:JSValue) =
-    JSEngine.print_result(context, s)
+    // JSEngine.print_result(context, s)
     let length = JSEngine.stringLength(s)
     let sb = new System.Text.StringBuilder(length)
     JSEngine.extractString(s, sb, length)
-    printf "this is fs: %s\n" <| sb.ToString()
+    // printf "this is fs: %s\n" <| sb.ToString()
     sb.ToString()
 
 let (|String|_|) (s:JSValue) =
@@ -121,9 +121,6 @@ let rec embed_reflection ty (x:obj) =
     elif ty.IsArray then embed_ienumerable(x :?> IEnumerable)
     elif (FSharpType.IsFunction ty) then
         let domain = FSharpType.GetFunctionElements ty |> fst
-        // x needs to be cast here to a function? shit
-        // done it with more reflection hacks
-        // TODO: get rid of this invoke madness, ask Tomas
         func.embed(fun (arg: JSValue) -> embed (x.GetType().GetMethod("Invoke", [| domain |]).Invoke(x, [| (project_reflection domain arg) |])))
 
     // elif (FSharpType.IsRecord ty) then
@@ -291,16 +288,25 @@ let main() =
     // let fs: string = project js
     // printf "This is s: %s\n" s
     // printf "this is fs: %s\n" fs
-    let l = [|11.1;22.2;33.3|]
-    let jl = embed l
-    JSEngine.registerValue(context, "jl", jl)
-    let twentytwo = JSEngine.execute_string(context, "jl[1]")
-    JSEngine.print_result(context, twentytwo)
+    // let l = [|11.1;22.2;33.3|]
+    // let jl = embed l
+    // JSEngine.registerValue(context, "jl", jl)
+    // let twentytwo = JSEngine.execute_string(context, "jl[1]")
+    // JSEngine.print_result(context, twentytwo)
 
-    let jar = JSEngine.execute_string(context, "[1,2,3]")
+    // let jar = JSEngine.execute_string(context, "['aaa', 'bbb']")
 
-    let ar: int[] = project jar
-    printf "this is ar: %A\n" ar
+    // let ar: string[] = project jar
+    // printf "this is ar: %A\n" ar
+
+
+    let enlist = Array.rev
+    let jenlist = embed enlist
+    JSEngine.registerValue(context, "enlist", jenlist)
+    // let on = JSEngine.execute_string(context, "enlist([1,2,3])")
+    let a = JSEngine.execute_string(context, "enlist(['a','b','c'])")
+    // JSEngine.print_result(context, on)
+    // JSEngine.print_result(context, a)
 
     ////////////////////////////////////
     // let id x = x
@@ -332,7 +338,7 @@ let main() =
     // JSEngine.print_result(context, j3)
     // // printf "this is r: %f\n" (project r)
 
-    // let add2 x :float= x + 1.0
+    // let add2 x :float = x + 1.0
     // let jadd = embed add2
     // JSEngine.registerValue(context, "addd", jadd)
     // let r = JSEngine.execute_string(context, "addd(-10.0)")
