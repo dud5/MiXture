@@ -3,11 +3,11 @@ module Mixture.NEmbedding
 open System.Runtime.InteropServices
 open Microsoft.FSharp.Reflection
 open System.Collections
+open System
 
 type JSValue = nativeint
 
-let context = JSEngine.createContext()
-
+let mutable context = nativeint(-1)
 
 let (|Boolean|_|) (b:JSValue) =
     if JSEngine.isBoolean(b) then Some(JSEngine.extractBoolean(b))
@@ -22,11 +22,9 @@ let (|Number|_|) (n:JSValue) =
     else None
 
 let getString (s:JSValue) =
-    // JSEngine.print_result(context, s)
     let length = JSEngine.stringLength(s)
     let sb = new System.Text.StringBuilder(length)
     JSEngine.extractString(s, sb, length)
-    // printf "this is fs: %s\n" <| sb.ToString()
     sb.ToString()
 
 let (|String|_|) (s:JSValue) =
@@ -35,7 +33,7 @@ let (|String|_|) (s:JSValue) =
 
 let (|Function|_|) (f:JSValue) =
     if JSEngine.isFunction(f) then
-        Some(fun (args: JSValue list) -> JSEngine.apply_function_arr(context, f, List.length args, List.toArray args))
+        Some(fun (args: JSValue list) -> JSEngine.apply_function_arr(JSUtils.context, f, List.length args, List.toArray args))
     else None
 
 let (|Null|_|) (x:JSValue) =
@@ -52,7 +50,6 @@ let (|Array|_|) (arr:JSValue) =
     else None
 
 
-
 // Embed-project pair
 type ('a, 'b) ep = { embed : 'a -> 'b; project: 'b -> 'a }
 
@@ -62,19 +59,30 @@ let to_float = float
 let to_int = int
 
 
+
+
+
+
 // Embed & project strategies for the different "basic" types
+// JAVASCRIPT HAS INFINITY; ADD THIS!!!!
 let float =
-    { embed = fun x -> JSEngine.makeFloat(context, x);
+    { embed = fun x ->
+          if System.Double.IsPositiveInfinity x then
+              JSEngine.makeInfinity(JSUtils.context, false)
+          elif System.Double.IsNegativeInfinity x then
+              JSEngine.makeInfinity(JSUtils.context, true)
+          else JSEngine.makeFloat(JSUtils.context, x) ;
+
       project = function Number x -> x | _ -> failwith "tried to project a nonfloat" }
 
 
 let string =
-    { embed = fun s -> JSEngine.makeString(context, s);
+    { embed = fun s -> JSEngine.makeString(JSUtils.context, s);
       project = function String s -> s | _ -> failwith "tried to project a nonstring" }
 
 
 let int =
-    { embed = fun n -> JSEngine.makeFloat(context, to_float n);
+    { embed = fun n -> JSEngine.makeFloat(JSUtils.context, to_float n);
       project = function
           | Integer n ->
               // printf "USing Integer %d\n" n
@@ -84,7 +92,7 @@ let int =
           | _ -> failwith "tried to project a non int" }
 
 let boolean =
-    { embed = fun (b: bool) -> JSEngine.makeBoolean(context, b) ;
+    { embed = fun (b: bool) -> JSEngine.makeBoolean(JSUtils.context, b) ;
       project = function
           | Boolean b -> b
           | String s -> s <> ""
@@ -93,18 +101,46 @@ let boolean =
           | Undefined -> false
           | _ -> true }
 
+let unit =
+    { embed  = fun () ->JSEngine.makeUndefined() ;
+      project = function
+          | Undefined -> ()
+          | _ -> failwith "tried to project a not undefined" }
+
+
+// let jnull =
+//     { embed () = JSEngine.makeNull() ;
+//       project = function
+//           | Null -> null
+//           | _ -> failwith "tried to project a not null" }
+        
+
 let func =
     { embed = fun (f: JSValue -> JSValue) ->
           let nativef (args: JSValue) =
-              let processed_args = args |> JSUtils.get_all_JS_arguments context
+              let processed_args = args |> JSUtils.get_all_JS_arguments JSUtils.context
               f (processed_args.[0])
-          JSEngine.makeFunction(context, new JSEngine.FSharpFunction(nativef)) ;
+          JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(nativef)) ;
 
       // don't need project
       project = fun r x -> failwith "Cannot call project for 'func'" }
 
-
 // let generate_JS_object x =
+//     let fieldNames = FSharpType.GetRecordFields (o.GetType());
+//     let fieldValues = FSharpValue.GetRecordFields o;
+//     let source = new StringBuilder()
+//     source.append("{")
+    
+    
+
+    
+// let record =
+//     { embed = fun (o:obj) ->
+//           let fieldNames = FSharpType.GetRecordFields (o.GetType());
+//           let fieldValues = FSharpValue.GetRecordFields o;
+      
+//       project }
+
 
 
 /// <summary>Embeds a value into an <c>JSvalue</c>, using type information provided
@@ -112,7 +148,6 @@ let func =
 /// <param name="x">The value that is being embedded</param>
 /// <return>A value of type <c>JSValue</c> which is the JavaScript equivalent of <c>x</c></return>
 let rec embed_reflection ty (x:obj) =
-    // if ty = typeof<int> then int.embed(x:?>int)
     if ty = typeof<string> then string.embed(x:?>string)
     elif ty = typeof<float> then float.embed(x:?>float)
     elif ty = typeof<int> then int.embed(x:?>int)
@@ -128,7 +163,6 @@ let rec embed_reflection ty (x:obj) =
     //     Array.iter (fun el ->
     //         let name = el.Name
     //         let value = el.)
-
     else
         printf "trying to embed a value of unknown type:\n"
         printf "%A\n" ty
@@ -139,7 +173,9 @@ let rec embed_reflection ty (x:obj) =
 /// <param name="x">The value that is being embedded</param>
 /// <return>A value of type <c>JSValue</c> which is the JavaScript equivalent of <c>x</c></return>
 // this fails with null (gettype)
-and embed x : JSValue = embed_reflection (x.GetType()) x
+and embed x : JSValue =
+    if box x = null then unit.embed()
+    else embed_reflection (x.GetType()) x
 
 // and embed (x:'T) : JSValue = embed_reflection (typeof<'T>) x
 
@@ -150,7 +186,7 @@ and project_func ty (f:JSValue list -> JSValue) : obj =
     else
         FSharpValue.MakeFunction(ty, fun arg -> project_hack range ([embed arg] |> f))
 
-/// <summary>Projects a <c>JSValue</c> into an F# value, using type information provided
+/// <summary>Projects a <c>JSValue</c> into an F# value, using type information provided</summary>
 /// <param name="ty">The <c>Type</c> value that specifies what type the F# should have
 /// <param name="x">The <c>JSValue</c> that is being projected
 /// <return>A value of type <c>ty</c> which is the F# equivalent of <c>x</c></return>
@@ -195,7 +231,7 @@ and project_reflection ty (x:JSValue) : obj =
         printf "I don't know how to project this\n"
         printf "type specified: %A\n" ty
         printf "value in JS: "
-        JSEngine.print_result(context, x)
+        JSEngine.print_result(JSUtils.context, x)
         failwith "Could not project a value"
 
 
@@ -213,18 +249,17 @@ and project<'T> (x: JSValue) : 'T =
 
 and embed_ienumerable (x: IEnumerable) =
     let length = x.GetType().GetProperty("Length").GetValue(x, null) :?> int
-    let res = JSEngine.makeArray(context, length)
+    let res = JSEngine.makeArray(JSUtils.context, length)
     let index = ref 0
     for el in x do
-        JSEngine.setElementArray(context, res, !index, embed el)
+        JSEngine.setElementArray(JSUtils.context, res, !index, embed el)
         index := !index + 1
     res
 
 and project_array ty (jarr: JSValue) =
-    let length = JSEngine.getArrayLength(context, jarr)
+    let length = JSEngine.getArrayLength(JSUtils.context, jarr)
     let farr: JSValue array = Array.zeroCreate length
-    JSEngine.extractArray(context, jarr, length, farr)
-    // TODO: get rid of float
+    JSEngine.extractArray(JSUtils.context, jarr, length, farr)
     let result = System.Array.CreateInstance(ty, length)
     Array.iteri (fun index el -> result.SetValue(project_hack ty el, index)) farr
     result
@@ -248,110 +283,28 @@ let list ty=
       project = project_list ty}
 
 
-/// <summary>Registers a <c>JSValue</c> in the global object of JavaScript,
+/// <summary>Registers a <c>JSValue</c> in the global object of JavaScript</summary>
 /// <param name="l">The list of tuples containing the name and the <c/>JSValue> to be assigned to</param>
 /// <return><c>Unit</c></return>
 let register_values (l: (string * JSValue) list) =
     let register_value (name, value) =
-        JSEngine.registerValue(context, name, value)
+        JSEngine.registerValue(JSUtils.context, name, value)
     List.iter register_value l
 
 
-let rec echo p =
-    match p with
-        | Boolean b -> printf "%b : Boolean\n" b
-        | Number n -> printf "%f: Number\n" n
-        | String s -> printf "%s: String\n" s
-        | Function f ->
-            printf "it's a function!\n"
-            let n = embed 41.1;
-            printf "i've embedded 41.1\n"
-            // let n = JSEngine.execute_string(context, "3")
-            let result = f [n]
-            printf "i've applied the function\n"
-            echo result
-        | _ -> printf "something else\n"
+// let main() =
 
+//     printf "Done\n"
+// do
+//     main()
 
-let main() =
-    // let p = JSEngine.execute_string(context, "(function(a) {return a+38.1;})")
-    // let add1 : float -> float = project p
-    // let r = add1 2.9
-    // printf "this is r %f\n" r
+// let a ty (x:obj) =
+//     if ty = typeof<string> then 1
+//     elif ty = typeof<float> then 2
+//     elif ty = typeof<int> then 3
+//     elif (x = null) then 4
+//     else 10
 
-    // // don't optimize context out!
-    printf "this is context: %A\n" context
-
-    // let s = "^@"
-    // let js = embed s
-    // JSEngine.print_result(context, js)
-    // let fs: string = project js
-    // printf "This is s: %s\n" s
-    // printf "this is fs: %s\n" fs
-    // let l = [|11.1;22.2;33.3|]
-    // let jl = embed l
-    // JSEngine.registerValue(context, "jl", jl)
-    // let twentytwo = JSEngine.execute_string(context, "jl[1]")
-    // JSEngine.print_result(context, twentytwo)
-
-    // let jar = JSEngine.execute_string(context, "['aaa', 'bbb']")
-
-    // let ar: string[] = project jar
-    // printf "this is ar: %A\n" ar
-
-
-    let enlist = Array.rev
-    let jenlist = embed enlist
-    JSEngine.registerValue(context, "enlist", jenlist)
-    // let on = JSEngine.execute_string(context, "enlist([1,2,3])")
-    let a = JSEngine.execute_string(context, "enlist(['a','b','c'])")
-    // JSEngine.print_result(context, on)
-    // JSEngine.print_result(context, a)
-
-    ////////////////////////////////////
-    // let id x = x
-    // let jid = embed id
-    // let r =
-    //     match jid with
-    //         | Function f -> f [embed 2.0]
-    //         | _ -> failwith ""
-    // JSEngine.print_result(context, r)
-
-    // let nums = [1;2;3]
-    // let jnums = embed nums
-    // JSEngine.print_result(context, jnums)
-
-
-    // let jadd = JSEngine.execute_string(context, "(function(x,y) {return x+y;})")
-    // let add: float->float->float = project jadd
-    // let add1 = add 1.0
-    // let add2 = add 2.0
-    // let three = add1 2.0;
-    // let four = add2 2.0;
-    // let five = add2 3.0;
-    // printf "This should be 3: %f\n" three
-    // printf "This should be 4: %f\n" four
-    // printf "This should be 5: %f\n" five
-
-    // let three = 3
-    // let j3 = embed 6
-    // JSEngine.print_result(context, j3)
-    // // printf "this is r: %f\n" (project r)
-
-    // let add2 x :float = x + 1.0
-    // let jadd = embed add2
-    // JSEngine.registerValue(context, "addd", jadd)
-    // let r = JSEngine.execute_string(context, "addd(-10.0)")
-    // let f:float = project r
-    // printf "%f\n" f
-    // JSEngine.print_result(context, r)
-
-    // let t = embed true
-    // JSEngine.registerValue(context, "tt", t)
-    // let r = JSEngine.execute_string(context, "if (tt) {var a = 3.0;} else {var a = 2.0;} a")
-    // let one: float = project r
-    // printf "This is three: %f\n" one
-
-    printf "Done\n"
-do
-    main()
+// let b x =
+//     if box x = null then -1
+//     else a (x.GetType()) x

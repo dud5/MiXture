@@ -1,4 +1,5 @@
 #include <iostream>
+#include <limits>
 #include <v8.h>
 #include <string.h>
 
@@ -214,6 +215,17 @@ extern "C" Handle<Value> makeFloat(Persistent<Context> context, double x) {
     return result;
 }
 
+extern "C" Handle<Value> makeInfinity(Persistent<Context> context, bool isNegative) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    double infinity = std::numeric_limits<double>::infinity();
+    if (isNegative)
+	infinity = -infinity;
+    
+    Persistent<Value> result = Persistent<Value>::New(Number::New(infinity));
+    return result;
+}
+
 extern "C" Handle<Value> makeString(Persistent<Context> context, const char* s) {
     HandleScope handle_scope;
     Context::Scope context_scope(context);
@@ -226,6 +238,22 @@ extern "C" Handle<Value> makeBoolean(Persistent<Context> context, bool b) {
     Context::Scope context_scope(context);
     Persistent<Value> result = Persistent<Value>::New(Boolean::New(b));
     return result;
+}
+
+extern "C" Handle<Value> makeUndefined() {
+    // HandleScope handle_scope;
+    // Context::Scope context_scope(context);
+    // Persistent<Value> result = Persistent<Value>::New(FunctionTemplate::New(cb)->GetFunction());
+    return Undefined();
+    // return result;
+}
+
+extern "C" Handle<Value> makeNull() {
+    // HandleScope handle_scope;
+    // Context::Scope context_scope(context);
+    // Persistent<Value> result = Persistent<Value>::New(FunctionTemplate::New(cb)->GetFunction());
+    return Null();
+    // return result;
 }
 
 extern "C" Handle<Value> makeFunction(Persistent<Context> context, CALLBACK cb) {
@@ -320,3 +348,10 @@ extern "C" void registerValue(Persistent<Context> context, const char* name, Han
     
     global->Set(String::New(name), val);
 }
+
+extern "C" bool strictComparison(Persistent<Context> context, Handle<Value> val1, Handle<Value> val2) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    return val1->StrictEquals(val2);
+}
+

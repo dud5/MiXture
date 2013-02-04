@@ -27,7 +27,7 @@ lump: $(CNAME).dylib
 	fsharpc $(JSENGINE).fs $(JSUTILS).fs $(FSNAME1).fs
 
 natural: $(CNAME).dylib
-	fsharpc $(JSENGINE).fs $(JSUTILS).fs $(FSNAME2).fs
+	fsharpc --doc:natural.xml $(JSENGINE).fs $(JSUTILS).fs $(FSNAME2).fs
 
 check-syntax:
 	$(CXX) -o nul -S ${CHK_SOURCES}

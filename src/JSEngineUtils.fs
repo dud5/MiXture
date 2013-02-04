@@ -61,15 +61,25 @@ extern void extractString(nativeint, System.Text.StringBuilder, int)
 extern bool extractBoolean(nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern int stringLength(nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern bool strictComparison(nativeint, nativeint, nativeint)
+
+
 
 
 // Make JavaScript values representing the F# values of each type
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint makeFloat(nativeint, double)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint makeInfinity(nativeint, bool)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint makeString(nativeint, string)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint makeBoolean(nativeint, bool)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint makeUndefined()
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint makeNull()
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint makeFunction(nativeint, FSharpFunction)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
