@@ -6,6 +6,7 @@ open System.Collections
 open System
 
 type JSValue = nativeint
+exception JSException of JSValue
 
 let mutable context = nativeint(-1)
 
@@ -33,7 +34,12 @@ let (|String|_|) (s:JSValue) =
 
 let (|Function|_|) (f:JSValue) =
     if JSEngine.isFunction(f) then
-        Some(fun (args: JSValue list) -> JSEngine.apply_function_arr(JSUtils.context, f, List.length args, List.toArray args))
+        Some(fun (args: JSValue list) ->
+             let mutable is_exception = Unchecked.defaultof<bool>
+             let result = JSEngine.apply_function_arr(JSUtils.context, f, List.length args, List.toArray args, &is_exception)
+             if is_exception then raise (JSException(result))
+             else result
+             )
     else None
 
 let (|Null|_|) (x:JSValue) =
@@ -59,12 +65,7 @@ let to_float = float
 let to_int = int
 
 
-
-
-
-
 // Embed & project strategies for the different "basic" types
-// JAVASCRIPT HAS INFINITY; ADD THIS!!!!
 let float =
     { embed = fun x ->
           if System.Double.IsPositiveInfinity x then
@@ -125,13 +126,36 @@ let func =
       // don't need project
       project = fun r x -> failwith "Cannot call project for 'func'" }
 
+
+// let exn =
+//     { embed = fun (e:exn) ->
+//           // let fields = FSharpValue.GetExceptionFields e
+//           JSEngine.makeException(JSUtils.context, 3) ;
+//       project = fun x -> failwith "Cannot project exceptions" }
+
+
+// let record_to_string r =
+//     let fieldNames = Array.map (fun (x: Reflection.PropertyInfo) -> x.Name) (FSharpType.GetRecordFields (x.GetType()))
+//     let fieldValues = FSharpValue.GetRecordFields x
+
+//     let source = new StringBuilder()
+//     source.Append("{")
+
+//     let names_values_to_string name value =
+//         source.AppendFormat("{0}:{1},", name, value)
+
+    
+//     source.Append("}")
+
+    
 // let generate_JS_object x =
-//     let fieldNames = FSharpType.GetRecordFields (o.GetType());
-//     let fieldValues = FSharpValue.GetRecordFields o;
+//     let fieldNames = FSharpType.GetRecordFields (x.GetType())
+//     let fieldValues = FSharpValue.GetRecordFields x
 //     let source = new StringBuilder()
 //     source.append("{")
-    
-    
+//     source.append("}")
+//     JSUtils.execute_string(source.ToString())
+
 
     
 // let record =
@@ -156,7 +180,21 @@ let rec embed_reflection ty (x:obj) =
     elif ty.IsArray then embed_ienumerable(x :?> IEnumerable)
     elif (FSharpType.IsFunction ty) then
         let domain = FSharpType.GetFunctionElements ty |> fst
-        func.embed(fun (arg: JSValue) -> embed (x.GetType().GetMethod("Invoke", [| domain |]).Invoke(x, [| (project_reflection domain arg) |])))
+        func.embed(fun (arg: JSValue) ->
+            try
+                embed (x.GetType().GetMethod("Invoke", [| domain |]).Invoke(x, [| (project_reflection domain arg) |]))
+            with
+                | exn -> JSEngine.throwException(JSUtils.context, embed exn)
+                   )
+
+    elif (FSharpType.IsExceptionRepresentation ty) then
+        let fields = FSharpValue.GetExceptionFields x
+        let js_fields = embed fields
+        JSEngine.makeException(JSUtils.context, js_fields)
+        
+    elif ty = typeof<System.Reflection.TargetInvocationException> then
+        embed (x :?> System.Reflection.TargetInvocationException).InnerException
+
 
     // elif (FSharpType.IsRecord ty) then
     //     let props = FSharpType.GetRecordFields ty
@@ -184,7 +222,7 @@ and project_func ty (f:JSValue list -> JSValue) : obj =
     if FSharpType.IsFunction range then
         FSharpValue.MakeFunction(ty, fun arg -> project_hack range (fun t -> f (embed arg :: t)))
     else
-        FSharpValue.MakeFunction(ty, fun arg -> project_hack range ([embed arg] |> f))
+        FSharpValue.MakeFunction(ty, fun arg -> project_hack range ( f [embed arg]))
 
 /// <summary>Projects a <c>JSValue</c> into an F# value, using type information provided</summary>
 /// <param name="ty">The <c>Type</c> value that specifies what type the F# should have
@@ -201,6 +239,8 @@ and project_hack ty (x:obj) : obj =
 
 
 and project_reflection ty (x:JSValue) : obj =
+    // if JSEngine.isException(x) then raise JSException
+    
     if ty = typeof<string> then string.project(x) |> box
     elif ty = typeof<float> then float.project(x) |> box
     elif ty = typeof<int> then int.project(x) |> box
@@ -225,6 +265,7 @@ and project_reflection ty (x:JSValue) : obj =
             | Boolean b -> project_reflection typeof<bool> x
             | Number n -> project_reflection typeof<float> x
             | String s -> project_reflection typeof<string> x
+            | Array -> project_reflection typeof<obj[]> x
             // | Function f ->
             | _ -> failwith ""
     else
@@ -290,21 +331,3 @@ let register_values (l: (string * JSValue) list) =
     let register_value (name, value) =
         JSEngine.registerValue(JSUtils.context, name, value)
     List.iter register_value l
-
-
-// let main() =
-
-//     printf "Done\n"
-// do
-//     main()
-
-// let a ty (x:obj) =
-//     if ty = typeof<string> then 1
-//     elif ty = typeof<float> then 2
-//     elif ty = typeof<int> then 3
-//     elif (x = null) then 4
-//     else 10
-
-// let b x =
-//     if box x = null then -1
-//     else a (x.GetType()) x

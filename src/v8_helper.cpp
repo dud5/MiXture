@@ -106,16 +106,25 @@ extern "C" Handle<Value> apply_function(Persistent<Context> context,
 
 extern "C" Handle<Value> apply_function_arr(Persistent<Context> context,
 					    Handle<Function> func, int argc,
-					    Handle<Value>* argv) {
+					    Handle<Value>* argv, bool* is_exception) {
     HandleScope handle_scope;
 
     Context::Scope context_scope(context);
 
+    TryCatch trycatch;
+    
     Handle<Value> result = func->Call(context->Global(), argc, argv);
 
+    if (result.IsEmpty()) {
+	*is_exception = true;
+	Handle<Value> exception = trycatch.Exception();
+	// String::AsciiValue exception_str(exception);
+	return Persistent<Value>::New(exception);
+    }
+
     Persistent<Value> js_result = Persistent<Value>::New(result);
-    
-    // print_result(context, result);    
+
+
     return js_result;
 }
 
@@ -263,13 +272,27 @@ extern "C" Handle<Value> makeFunction(Persistent<Context> context, CALLBACK cb) 
     return result;
 }
 
+extern "C" Handle<Value> makeException(Persistent<Context> context, Handle<Array> array) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    Persistent<Object> exception = Persistent<Object>::New(Object::New());
+    exception->Set(String::New("Message"), String::New("An F# exception occurred"));
+    exception->Set(String::New("Values"), array);
+    Persistent<Value> result = Persistent<Value>::New(exception);
+    return result;
+}
+
+extern "C" Handle<Value> throwException(Persistent<Context> context, Handle<Value> exception) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    ThrowException(exception);
+    return Persistent<Value>::New(String::New("hello, ed"));
+}
 
 extern "C" Handle<Value> makeArray(Persistent<Context> context, int size, void* array) {
     HandleScope handle_scope;
     Context::Scope context_scope(context);
     Persistent<Array> result = Persistent<Array>::New(Array::New(size));
-    // Persistent<Value> first = Persistent<Value>::New(String::New("Hello, word"));
-    // result->Set(0,first);
     return result;
 }
 

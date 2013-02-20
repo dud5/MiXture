@@ -1,5 +1,6 @@
 open FsCheck
 open Mixture
+open System.Diagnostics
 open Mixture.NEmbedding
 open System
 
@@ -66,13 +67,13 @@ type NEmbeddingTests =
     static member ``Double crossing of positive infinity JS to FS`` () = testPositiveInfinityJ2FS()
     static member ``Double crossing of negative infinity`` () = testNegativeInfinityFS2J()
     static member ``Double crossing of negative infinity JS to FS`` () = testNegativeInfinityJ2FS()
-    
-let main() =
-    JSUtils.create_context() |> ignore
-    Check.QuickAll<NEmbeddingTests>()
-    
-do
-    main()
+
+
+
+
+
+
+
 
 let rec fib n =
     if n < 2 then 1
@@ -82,3 +83,55 @@ let rec factorial x =
     match x with
         | 0 | 1 -> 1
         | n -> n * factorial (n-1)
+
+
+let test_function_embed() =
+    let jfib = NEmbedding.embed fib
+    NEmbedding.register_values(["jfib", jfib])
+    printf "jfib(45): %d\n" (NEmbedding.project (JSUtils.execute_string("jfib(45)")))
+    printf "fib(45): %d\n" (fib 45)
+
+exception AA of int*string
+
+let test_function_embed_ex () =
+    let f n =
+        if n<2 then raise (AA(3, "Hello, Raluca!"))
+        else n
+    let jf = NEmbedding.embed f
+    NEmbedding.register_values(["jf", jf])
+    // JSUtils.execute_string("jf(1)") |> ignore
+    printf "jf(1): %A\n" (NEmbedding.project (JSUtils.execute_string("try { jf(1) } catch(err) {err.Values;}")))
+    // printf "jf(1): %d\n" (NEmbedding.project (JSUtils.execute_string("try { throw 2 } catch(err) { 3;}")))
+
+
+let test_function_project() =
+    // let jfib = JSUtils.execute_string("var jfib = (function fib(n) { if (n<2) {return 1;} else {return fib(n-1) + fib(n-2);}}); jfib;")
+    let jfib = JSUtils.execute_string("var jfib = (function fib(n) { throw 34;}); jfib;")
+    let fib: int->int = project jfib
+    // printf "jfib(45): %d\n" (NEmbedding.project (JSUtils.execute_string("jfib(45)")))
+    let result =
+        try
+            fib 45
+        with
+            | Mixture.NEmbedding.JSException(x) -> NEmbedding.project x
+
+    printf "fib(45): %d\n" result
+    
+// let test_function_project_unit() =
+//     let jlt2 = JSUtils.execute_string("var lt2 = (function fib(n) {if (n<2) {return undefined} else {return 3;}}); lt2;")
+//     let lt2: int->unit = project jlt2
+//     (NEmbedding.project (JSUtils.execute_string("lt2(1)"))) |> ignore
+//     (lt2 1) |> ignore
+    
+
+
+let main() =
+    JSUtils.create_context() |> ignore
+    Check.QuickAll<NEmbeddingTests>()
+    // test_function_embed()
+    test_function_embed_ex()
+    // test_function_project()
+    // test_function_project_unit()
+do
+    main()
+

@@ -189,7 +189,8 @@ module LumpEmbedding =
 
         let apply_JS_func_arr context func args =
             let arg_pointers = Array.map (delumpify context) args
-            new JSLump(JSEngine.apply_function_arr(context, (func:>Lump).Pointer, Array.length args, arg_pointers))
+            let mutable is_exception = Unchecked.defaultof<bool>
+            new JSLump(JSEngine.apply_function_arr(context, (func:>Lump).Pointer, Array.length args, arg_pointers, &is_exception))
 
         // TODO: get rid of this (moving it to the finalizer of JSLump)
         let dispose_handle handle =

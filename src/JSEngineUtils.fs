@@ -12,7 +12,7 @@ type FSharpFunction = delegate of nativeint -> nativeint
 // for passing arrays, see
 // http://stackoverflow.com/questions/12622160/from-c-sharp-to-f-pinned-array-and-stringbuilder-in-external-function-called-f
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-extern nativeint apply_function_arr(nativeint, nativeint, int, nativeint[])
+extern nativeint apply_function_arr(nativeint, nativeint, int, nativeint[], [<Out>] bool& is_ex)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint execute_string(nativeint, string)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
@@ -92,6 +92,10 @@ extern nativeint getElementArray(nativeint, nativeint, int)
 extern int getArrayLength(nativeint, nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern void extractArray(nativeint, nativeint, int, nativeint[])
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint makeException(nativeint, nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint throwException(nativeint, nativeint)
 
 
 
