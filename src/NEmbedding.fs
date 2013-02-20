@@ -114,24 +114,6 @@ let unit =
 //       project = function
 //           | Null -> null
 //           | _ -> failwith "tried to project a not null" }
-        
-
-let func =
-    { embed = fun (f: JSValue -> JSValue) ->
-          let nativef (args: JSValue) =
-              let processed_args = args |> JSUtils.get_all_JS_arguments JSUtils.context
-              f (processed_args.[0])
-          JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(nativef)) ;
-
-      // don't need project
-      project = fun r x -> failwith "Cannot call project for 'func'" }
-
-
-// let exn =
-//     { embed = fun (e:exn) ->
-//           // let fields = FSharpValue.GetExceptionFields e
-//           JSEngine.makeException(JSUtils.context, 3) ;
-//       project = fun x -> failwith "Cannot project exceptions" }
 
 
 // let record_to_string r =
@@ -172,6 +154,8 @@ let func =
 /// <param name="x">The value that is being embedded</param>
 /// <return>A value of type <c>JSValue</c> which is the JavaScript equivalent of <c>x</c></return>
 let rec embed_reflection ty (x:obj) =
+    // let ty = x.GetType()
+    // WHY NOT USE THE PREVIOUS LINE AND embed only passes x?
     if ty = typeof<string> then string.embed(x:?>string)
     elif ty = typeof<float> then float.embed(x:?>float)
     elif ty = typeof<int> then int.embed(x:?>int)
@@ -179,13 +163,7 @@ let rec embed_reflection ty (x:obj) =
     elif ty.IsGenericType && ty.GetGenericTypeDefinition() = typedefof<list<_>> then embed_ienumerable(x :?> IEnumerable)
     elif ty.IsArray then embed_ienumerable(x :?> IEnumerable)
     elif (FSharpType.IsFunction ty) then
-        let domain = FSharpType.GetFunctionElements ty |> fst
-        func.embed(fun (arg: JSValue) ->
-            try
-                embed (x.GetType().GetMethod("Invoke", [| domain |]).Invoke(x, [| (project_reflection domain arg) |]))
-            with
-                | exn -> JSEngine.throwException(JSUtils.context, embed exn)
-                   )
+        embed_func(x)
 
     elif (FSharpType.IsExceptionRepresentation ty) then
         let fields = FSharpValue.GetExceptionFields x
@@ -211,18 +189,9 @@ let rec embed_reflection ty (x:obj) =
 /// <param name="x">The value that is being embedded</param>
 /// <return>A value of type <c>JSValue</c> which is the JavaScript equivalent of <c>x</c></return>
 // this fails with null (gettype)
-and embed x : JSValue =
+and embed (x:obj) : JSValue =
     if box x = null then unit.embed()
     else embed_reflection (x.GetType()) x
-
-// and embed (x:'T) : JSValue = embed_reflection (typeof<'T>) x
-
-and project_func ty (f:JSValue list -> JSValue) : obj =
-    let range = FSharpType.GetFunctionElements ty |> snd
-    if FSharpType.IsFunction range then
-        FSharpValue.MakeFunction(ty, fun arg -> project_hack range (fun t -> f (embed arg :: t)))
-    else
-        FSharpValue.MakeFunction(ty, fun arg -> project_hack range ( f [embed arg]))
 
 /// <summary>Projects a <c>JSValue</c> into an F# value, using type information provided</summary>
 /// <param name="ty">The <c>Type</c> value that specifies what type the F# should have
@@ -282,11 +251,32 @@ and project_reflection ty (x:JSValue) : obj =
 /// <return>A value of type <c>'T</c> which is the F# equivalent of <c>x</c></return>
 and project<'T> (x: JSValue) : 'T =
     project_hack (typeof<'T>) x |> unbox<'T>
-    // let a = project_hack (typeof<'T>) x
-    // printf "i'm okay\n"
-    // printf "i'm project somthing of type %A\n" (typeof<'T>)
-    // unbox<'T> a
 
+// and embed_func (f:JSValue -> JSValue) =
+//     let nativef (args: JSValue) =
+//         let processed_args = args |> JSUtils.get_all_JS_arguments JSUtils.context
+//         f (processed_args.[0])
+//     JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(nativef))
+
+and embed_func (x:obj) =
+    let f = fun (arg: JSValue) ->
+        let domain = FSharpType.GetFunctionElements (x.GetType()) |> fst
+        try
+            embed (x.GetType().GetMethod("Invoke", [| domain |]).Invoke(x, [| (project_reflection domain arg) |]))
+        with
+            | exn -> JSEngine.throwException(JSUtils.context, embed exn)
+
+    let nativef (args: JSValue) =
+        let processed_args = args |> JSUtils.get_all_JS_arguments JSUtils.context
+        f (processed_args.[0])
+    JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(nativef))
+
+and project_func ty (f:JSValue list -> JSValue) : obj =
+    let range = FSharpType.GetFunctionElements ty |> snd
+    if FSharpType.IsFunction range then
+        FSharpValue.MakeFunction(ty, fun arg -> project_hack range (fun t -> f (embed arg :: t)))
+    else
+        FSharpValue.MakeFunction(ty, fun arg -> project_hack range ( f [embed arg]))
 
 and embed_ienumerable (x: IEnumerable) =
     let length = x.GetType().GetProperty("Length").GetValue(x, null) :?> int
@@ -323,6 +313,11 @@ let list ty=
     { embed = embed_ienumerable ;
       project = project_list ty}
 
+let func =
+    { embed = embed_func ;
+      // don't need project
+      project = fun x r -> failwith "can't project a fnc" }
+      // project = project_func }
 
 /// <summary>Registers a <c>JSValue</c> in the global object of JavaScript</summary>
 /// <param name="l">The list of tuples containing the name and the <c/>JSValue> to be assigned to</param>
