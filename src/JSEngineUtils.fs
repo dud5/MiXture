@@ -96,6 +96,10 @@ extern void extractArray(nativeint, nativeint, int, nativeint[])
 extern nativeint makeException(nativeint, nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint throwException(nativeint, nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint makeObjectLiteral(nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern void setProperty(nativeint, nativeint, string, nativeint)
 
 
 

@@ -103,43 +103,30 @@ let boolean =
           | _ -> true }
 
 let unit =
-    { embed  = fun () ->JSEngine.makeUndefined() ;
+    { embed  = fun () -> JSEngine.makeUndefined() ;
       project = function
           | Undefined -> ()
           | _ -> failwith "tried to project a not undefined" }
 
 
 // let jnull =
-//     { embed () = JSEngine.makeNull() ;
+//     { embed = fun () -> JSEngine.makeNull() ;
 //       project = function
 //           | Null -> null
 //           | _ -> failwith "tried to project a not null" }
 
 
-// let record_to_string r =
-//     let fieldNames = Array.map (fun (x: Reflection.PropertyInfo) -> x.Name) (FSharpType.GetRecordFields (x.GetType()))
-//     let fieldValues = FSharpValue.GetRecordFields x
-
-//     let source = new StringBuilder()
-//     source.Append("{")
-
-//     let names_values_to_string name value =
-//         source.AppendFormat("{0}:{1},", name, value)
 
     
-//     source.Append("}")
 
-    
-// let generate_JS_object x =
-//     let fieldNames = FSharpType.GetRecordFields (x.GetType())
-//     let fieldValues = FSharpValue.GetRecordFields x
-//     let source = new StringBuilder()
-//     source.append("{")
-//     source.append("}")
-//     JSUtils.execute_string(source.ToString())
+let record_to_string r =
+    let record_fields = FSharpType.GetRecordFields (r.GetType())
+    let field_names = Array.map (fun (x: Reflection.PropertyInfo) -> x.Name) record_fields
+    let field_types = Array.map (fun (x: Reflection.PropertyInfo) -> x.PropertyType) record_fields
+    let field_values = Array.map (fun (x: Reflection.PropertyInfo) -> x.GetValue(r, null)) record_fields
+    // (field_names, field_types, field_values)
+    (field_names, field_values)
 
-
-    
 // let record =
 //     { embed = fun (o:obj) ->
 //           let fieldNames = FSharpType.GetRecordFields (o.GetType());
@@ -173,12 +160,8 @@ let rec embed_reflection ty (x:obj) =
     elif ty = typeof<System.Reflection.TargetInvocationException> then
         embed (x :?> System.Reflection.TargetInvocationException).InnerException
 
-
-    // elif (FSharpType.IsRecord ty) then
-    //     let props = FSharpType.GetRecordFields ty
-    //     Array.iter (fun el ->
-    //         let name = el.Name
-    //         let value = el.)
+    elif (FSharpType.IsRecord ty) then
+        embed_record x
     else
         printf "trying to embed a value of unknown type:\n"
         printf "%A\n" ty
@@ -302,6 +285,20 @@ and project_array ty (jarr: JSValue) =
 // and project_list ty = (project_array ty ) >> Array.toList
 and project_list ty : JSValue -> float list = fun x -> [1.1]
 // and project_list<'T> : JSValue -> 'T list = (project_array typeof<'T>) >> Array.toList<'T>
+
+
+and embed_record r = 
+    let result = JSUtils.makeObjectLiteral(JSUtils.context)
+    // let (field_names, field_types, field_values) = record_to_string r
+    // let's see if we can do it without the types
+    let (field_names, field_values) = record_to_string r
+    let field_values_embedded = Array.map embed field_values
+    // set properties on result with field_names as names and field_values as values
+    Array.iter2 (JSUtils.setProperty result) field_names field_values_embedded
+    result
+
+
+
 
 let array ty =
     { embed = embed_ienumerable ;

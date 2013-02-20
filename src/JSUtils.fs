@@ -27,3 +27,8 @@ let execute_string s =
 /// <summary>Loads a JavaScript file and executes it, returning its value</summary>
 let load_file =
     System.IO.File.ReadAllText >> execute_string
+
+let setProperty (o: nativeint) (name: string) (value: nativeint) =
+    JSEngine.setProperty(context, o, name, value)
+
+let makeObjectLiteral = JSEngine.makeObjectLiteral

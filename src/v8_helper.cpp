@@ -325,6 +325,20 @@ extern "C" void extractArray(Persistent<Context> context,
     }
 }
 
+extern "C" Handle<Value> makeObjectLiteral(Persistent<Context> context) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    Persistent<Object> object = Persistent<Object>::New(Object::New());
+    return object;
+}
+
+extern "C" void setProperty(Persistent<Context> context, Handle<Object> object, const char* str, Handle<Value> value) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    object->Set(String::New(str), value);
+}
+
+
 extern "C" void echo(const char* str) {
     cout << "This is a string from F# " << str << endl;
 }

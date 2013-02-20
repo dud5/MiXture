@@ -125,6 +125,18 @@ let test_function_project() =
 
     printf "fib(45): %d\n" result
 
+type website =
+    { Title : string;
+        Url : string }
+    
+let test_record () =
+    let homepage = { Title = "Google"; Url = "http://www.google.com" }
+    let jhp = embed homepage
+    JSEngine.print_result(JSUtils.context, jhp)
+    NEmbedding.register_values(["jhp", jhp])
+    JSEngine.print_result(JSUtils.context, JSUtils.execute_string("jhp.Title"))
+    JSEngine.print_result(JSUtils.context, JSUtils.execute_string("jhp.Url"))
+
 // let test_function_project_unit() =
 //     let jlt2 = JSUtils.execute_string("var lt2 = (function fib(n) {if (n<2) {return undefined} else {return 3;}}); lt2;")
 //     let lt2: int->unit = project jlt2
@@ -136,11 +148,12 @@ let test_function_project() =
 let main() =
     JSUtils.create_context() |> ignore
     Check.QuickAll<NEmbeddingTests>()
-    test_function_embed()
-    test_function_embed_ex()
-    test_function_project_ex()
-    test_function_project()
+    // test_function_embed()
+    // test_function_embed_ex()
+    // test_function_project_ex()
+    // test_function_project()
     // test_function_project_unit()
+    test_record()
 do
     main()
 
