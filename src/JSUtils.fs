@@ -32,3 +32,8 @@ let setProperty (o: nativeint) (name: string) (value: nativeint) =
     JSEngine.setProperty(context, o, name, value)
 
 let makeObjectLiteral = JSEngine.makeObjectLiteral
+
+let extract_array jarr length =
+    let farr: nativeint array = Array.zeroCreate length
+    JSEngine.extractArray(context, jarr, length, farr)
+    farr

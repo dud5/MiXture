@@ -325,6 +325,26 @@ extern "C" void extractArray(Persistent<Context> context,
     }
 }
 
+extern "C" void getProperties(Persistent<Context> context,
+			     Handle<Object> obj,
+			     Handle<Array> names,
+			     int length,
+			     Handle<Value>* result) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    for (int i = 0; i < length; i++) {
+	result[i] = obj->Get(names->Get(i));
+    }
+}
+
+extern "C" Handle<Value> getOwnPropertyNames(Persistent<Context> context, Handle<Object> object) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    Persistent<Array> names = Persistent<Array>::New(object->GetOwnPropertyNames());
+    return names;
+}
+
+
 extern "C" Handle<Value> makeObjectLiteral(Persistent<Context> context) {
     HandleScope handle_scope;
     Context::Scope context_scope(context);

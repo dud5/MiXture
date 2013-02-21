@@ -117,22 +117,24 @@ let unit =
 
 
 
+let get_field_names ty =
+    let record_fields = FSharpType.GetRecordFields ty
+    Array.map (fun (x: Reflection.PropertyInfo) -> x.Name) record_fields
+
+let get_field_types ty =
+    let record_fields = FSharpType.GetRecordFields ty
+    Array.map (fun (x: Reflection.PropertyInfo) -> x.PropertyType) record_fields
+
+let get_field_values r =
+    let record_fields = FSharpType.GetRecordFields (r.GetType())
+    Array.map (fun (x: Reflection.PropertyInfo) -> x.GetValue(r, null)) record_fields
     
 
-let record_to_string r =
-    let record_fields = FSharpType.GetRecordFields (r.GetType())
-    let field_names = Array.map (fun (x: Reflection.PropertyInfo) -> x.Name) record_fields
-    let field_types = Array.map (fun (x: Reflection.PropertyInfo) -> x.PropertyType) record_fields
-    let field_values = Array.map (fun (x: Reflection.PropertyInfo) -> x.GetValue(r, null)) record_fields
-    // (field_names, field_types, field_values)
-    (field_names, field_values)
 
-// let record =
-//     { embed = fun (o:obj) ->
-//           let fieldNames = FSharpType.GetRecordFields (o.GetType());
-//           let fieldValues = FSharpValue.GetRecordFields o;
-      
-//       project }
+let is_permutation l1 l2 =
+    Array.sort l1 = Array.sort l2
+
+    
 
 
 
@@ -211,6 +213,9 @@ and project_reflection ty (x:JSValue) : obj =
         let el_ty = ty.GetElementType()
         (project_array el_ty x) |> box
 
+    elif (FSharpType.IsRecord ty) then
+        project_record ty x
+
     elif ty = typeof<obj> then
         // we don't know what we want, let's see what we can get
         match x with
@@ -272,8 +277,7 @@ and embed_ienumerable (x: IEnumerable) =
 
 and project_array ty (jarr: JSValue) =
     let length = JSEngine.getArrayLength(JSUtils.context, jarr)
-    let farr: JSValue array = Array.zeroCreate length
-    JSEngine.extractArray(JSUtils.context, jarr, length, farr)
+    let farr = JSUtils.extract_array jarr length
     let result = System.Array.CreateInstance(ty, length)
     Array.iteri (fun index el -> result.SetValue(project_hack ty el, index)) farr
     result
@@ -291,14 +295,38 @@ and embed_record r =
     let result = JSUtils.makeObjectLiteral(JSUtils.context)
     // let (field_names, field_types, field_values) = record_to_string r
     // let's see if we can do it without the types
-    let (field_names, field_values) = record_to_string r
+    let field_names, field_values = get_field_names (r.GetType()), get_field_values r
     let field_values_embedded = Array.map embed field_values
     // set properties on result with field_names as names and field_values as values
     Array.iter2 (JSUtils.setProperty result) field_names field_values_embedded
     result
 
-
-
+and project_record ty (x:JSValue) =
+    let r_field_names = get_field_names ty
+    let j_field_names: string[] = JSEngine.getOwnPropertyNames(JSUtils.context, x) |> project
+    let length = r_field_names.Length
+    if r_field_names.Length <> j_field_names.Length
+    then
+        printf "this is r_field_names: %d\n" r_field_names.Length
+        printf "this is j_field_names: %d\n" j_field_names.Length
+        failwith "1Project fail; the names of the JavaScript object and the F# record fields don't match"
+    else
+        // check that both names lists are a permutation of each other
+        if (not (is_permutation r_field_names j_field_names))
+        then failwith "2Project fail; the names of the JavaScript object and the F# record fields don't match"
+        else
+            // project each value from x to the appropriate type according to r_field_types
+            // let j_field_values = JSUtils.extract_array JSEngine.getOwnProperties(JSUtils.context, x) j_field_names.Length
+            let j_field_values: nativeint array = Array.zeroCreate length
+            JSEngine.getProperties(JSUtils.context, x, embed r_field_names, length, j_field_values)
+            let r_field_types = get_field_types ty
+            let r_values =
+                try
+                    Array.map2 (fun value_type value -> project_hack value_type value) r_field_types j_field_values
+                with
+                    exn -> failwith "3Project fail; the names of the JavaScript object and the F# record fields don't match"           
+            // this shouldn't fail because the value have been projected as directed by ty
+            FSharpValue.MakeRecord(ty, r_values)
 
 let array ty =
     { embed = embed_ienumerable ;

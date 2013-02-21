@@ -100,6 +100,10 @@ extern nativeint throwException(nativeint, nativeint)
 extern nativeint makeObjectLiteral(nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern void setProperty(nativeint, nativeint, string, nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint getOwnPropertyNames(nativeint, nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern void getProperties(nativeint, nativeint, nativeint, int, nativeint[])
 
 
 
