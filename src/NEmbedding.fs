@@ -22,14 +22,8 @@ let (|Number|_|) (n:JSValue) =
     if JSEngine.isNumber(n) then Some(JSEngine.extractFloat(n))
     else None
 
-let getString (s:JSValue) =
-    let length = JSEngine.stringLength(s)
-    let sb = new System.Text.StringBuilder(length)
-    JSEngine.extractString(s, sb, length)
-    sb.ToString()
-
 let (|String|_|) (s:JSValue) =
-    if JSEngine.isString(s) then Some(getString s)
+    if JSEngine.isString(s) then Some(JSUtils.get_string s)
     else None
 
 let (|Function|_|) (f:JSValue) =
@@ -59,12 +53,6 @@ let (|Array|_|) (arr:JSValue) =
 // Embed-project pair
 type ('a, 'b) ep = { embed : 'a -> 'b; project: 'b -> 'a }
 
-// float is an F#: int -> float
-let to_float = float
-// int is an F#: float -> int
-let to_int = int
-
-
 // Embed & project strategies for the different "basic" types
 let float =
     { embed = fun x ->
@@ -83,13 +71,13 @@ let string =
 
 
 let int =
-    { embed = fun n -> JSEngine.makeFloat(JSUtils.context, to_float n);
+    { embed = fun n -> JSEngine.makeFloat(JSUtils.context, Utils.to_float n);
       project = function
           | Integer n ->
               // printf "USing Integer %d\n" n
               n
           | Number x ->
-              if x = to_float (int x) then (int x) else failwith "tried to project a float or it's outside the valid range"
+              if x = Utils.to_float (int x) then (int x) else failwith "tried to project a float or it's outside the valid range"
           | _ -> failwith "tried to project a non int" }
 
 let boolean =
@@ -114,27 +102,6 @@ let unit =
 //       project = function
 //           | Null -> null
 //           | _ -> failwith "tried to project a not null" }
-
-
-
-let get_field_names ty =
-    let record_fields = FSharpType.GetRecordFields ty
-    Array.map (fun (x: Reflection.PropertyInfo) -> x.Name) record_fields
-
-let get_field_types ty =
-    let record_fields = FSharpType.GetRecordFields ty
-    Array.map (fun (x: Reflection.PropertyInfo) -> x.PropertyType) record_fields
-
-let get_field_values r =
-    let record_fields = FSharpType.GetRecordFields (r.GetType())
-    Array.map (fun (x: Reflection.PropertyInfo) -> x.GetValue(r, null)) record_fields
-    
-
-
-let is_permutation l1 l2 =
-    Array.sort l1 = Array.sort l2
-
-    
 
 
 
@@ -240,23 +207,22 @@ and project_reflection ty (x:JSValue) : obj =
 and project<'T> (x: JSValue) : 'T =
     project_hack (typeof<'T>) x |> unbox<'T>
 
-// and embed_func (f:JSValue -> JSValue) =
-//     let nativef (args: JSValue) =
-//         let processed_args = args |> JSUtils.get_all_JS_arguments JSUtils.context
-//         f (processed_args.[0])
-//     JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(nativef))
-
 and embed_func (x:obj) =
-    let f = fun (arg: JSValue) ->
+    let f = fun (arg: JSValue[]) ->
         let domain = FSharpType.GetFunctionElements (x.GetType()) |> fst
+        let projected_args =
+            if FSharpType.IsTuple domain then
+                let proj_args_array = Array.map2 project_reflection (FSharpType.GetTupleElements domain) arg
+                [| FSharpValue.MakeTuple(proj_args_array, domain) |]
+            else [| project_reflection domain (arg.[0]) |]
         try
-            embed (x.GetType().GetMethod("Invoke", [| domain |]).Invoke(x, [| (project_reflection domain arg) |]))
+            embed (x.GetType().GetMethod("Invoke", [| domain |]).Invoke(x, projected_args))
         with
             | exn -> JSEngine.throwException(JSUtils.context, embed exn)
 
     let nativef (args: JSValue) =
         let processed_args = args |> JSUtils.get_all_JS_arguments JSUtils.context
-        f (processed_args.[0])
+        f (processed_args)
     JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(nativef))
 
 and project_func ty (f:JSValue list -> JSValue) : obj =
@@ -282,7 +248,6 @@ and project_array ty (jarr: JSValue) =
     Array.iteri (fun index el -> result.SetValue(project_hack ty el, index)) farr
     result
 
-
 // TODO: how to specify the type of list I want from a System.Type?
 // temporarily using floats just to test it works
 // and project_list : JSValue -> float list = (project_array typeof<obj>) >> Array.toList
@@ -295,14 +260,37 @@ and embed_record r =
     let result = JSUtils.makeObjectLiteral(JSUtils.context)
     // let (field_names, field_types, field_values) = record_to_string r
     // let's see if we can do it without the types
-    let field_names, field_values = get_field_names (r.GetType()), get_field_values r
+    let field_names, field_values = Utils.get_field_names (r.GetType()), Utils.get_field_values r
     let field_values_embedded = Array.map embed field_values
     // set properties on result with field_names as names and field_values as values
     Array.iter2 (JSUtils.setProperty result) field_names field_values_embedded
     result
 
+/// <summary>Helper function for <c>project_record</c>. Creates an array of the values required to construct a
+/// record of type <c>ty</c>.</summary>
+/// <param name="ty">The F# <c>System.Type</c> of the record to be projected to</param>
+/// <param name="x">The JavaScript object that is being projected</param>
+/// <param name="r_field_names">Array of the names of the fields of the type <c>ty</c></param>
+/// <return>An object array used to create a record of type <c>ty</c> using <c>FSharpValue.MakeRecord</c></return>
+and project_object_properties ty x (r_field_names: string[]) =
+    // project each value from x to the appropriate type according to r_field_types
+    let j_field_values: nativeint array = Array.zeroCreate r_field_names.Length
+    // TODO: shouldn't need to embed the names, try passing a string array?
+    JSEngine.getProperties(JSUtils.context, x, embed r_field_names, r_field_names.Length, j_field_values)
+    let r_field_types = Utils.get_field_types ty
+    let r_values =
+        try
+            Array.map2 (fun value_type value -> project_hack value_type value) r_field_types j_field_values
+        with
+            exn -> failwith "3Project fail; the names of the JavaScript object and the F# record fields don't match"
+    r_values
+
+/// <summary>Projects a JavaScript value into an F# record specified by <c>ty</c></summary>
+/// <param name="ty">The record type being used to project x</param>
+/// <param name="x">The object that is being projected</param>
+/// <return>A value of type <c>'T</c> which is the F# equivalent of <c>x</c></return>
 and project_record ty (x:JSValue) =
-    let r_field_names = get_field_names ty
+    let r_field_names = Utils.get_field_names ty
     let j_field_names: string[] = JSEngine.getOwnPropertyNames(JSUtils.context, x) |> project
     let length = r_field_names.Length
     if r_field_names.Length <> j_field_names.Length
@@ -312,22 +300,16 @@ and project_record ty (x:JSValue) =
         failwith "1Project fail; the names of the JavaScript object and the F# record fields don't match"
     else
         // check that both names lists are a permutation of each other
-        if (not (is_permutation r_field_names j_field_names))
+        if (not (Utils.is_permutation r_field_names j_field_names))
         then failwith "2Project fail; the names of the JavaScript object and the F# record fields don't match"
         else
-            // project each value from x to the appropriate type according to r_field_types
-            // let j_field_values = JSUtils.extract_array JSEngine.getOwnProperties(JSUtils.context, x) j_field_names.Length
-            let j_field_values: nativeint array = Array.zeroCreate length
-            JSEngine.getProperties(JSUtils.context, x, embed r_field_names, length, j_field_values)
-            let r_field_types = get_field_types ty
-            let r_values =
-                try
-                    Array.map2 (fun value_type value -> project_hack value_type value) r_field_types j_field_values
-                with
-                    exn -> failwith "3Project fail; the names of the JavaScript object and the F# record fields don't match"           
+            let r_values = project_object_properties ty x r_field_names
             // this shouldn't fail because the value have been projected as directed by ty
-            FSharpValue.MakeRecord(ty, r_values)
-
+            try
+                FSharpValue.MakeRecord(ty, r_values)
+            with
+                exn -> failwith "Projection into a record failed when creating the record"
+            
 let array ty =
     { embed = embed_ienumerable ;
       // might need to pass some type information to project

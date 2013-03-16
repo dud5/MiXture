@@ -6,6 +6,7 @@ FSNAME1 = LEmbedding
 FSNAME2 = NEmbedding
 JSENGINE = JSEngineUtils
 JSUTILS = JSUtils
+UTILS = Utils
 FSTEST = Tests
 V8PATH = ~/Coding/new_v8/v8/out/ia32.release/libv8_{base,snapshot}.a
 OBJS = $(CNAME).dylib $(FSNAME).fs
@@ -21,13 +22,13 @@ $(CNAME).dylib: $(CNAME).o
 	$(CC) $(CFLAGS) -c $(.SOURCE)
 
 $(FSNAME).exe: $(CNAME).dylib
-	fsharpc $(JSENGINE).fs $(JSUTILS).fs $(FSNAME1).fs $(FSNAME2).fs $(FSTEST).fs
+	fsharpc $(JSENGINE).fs $(JSUTILS).fs $(UTILS).fs $(FSNAME1).fs $(FSNAME2).fs $(FSTEST).fs
 
 lump: $(CNAME).dylib
-	fsharpc $(JSENGINE).fs $(JSUTILS).fs $(FSNAME1).fs
+	fsharpc $(JSENGINE).fs $(JSUTILS).fs $(UTILS).fs $(FSNAME1).fs
 
 natural: $(CNAME).dylib
-	fsharpc --doc:natural.xml $(JSENGINE).fs $(JSUTILS).fs $(FSNAME2).fs
+	fsharpc --doc:natural.xml $(JSENGINE).fs $(JSUTILS).fs $(UTILS).fs $(FSNAME2).fs
 
 check-syntax:
 	$(CXX) -o nul -S ${CHK_SOURCES}
@@ -36,5 +37,5 @@ clean:
 	rm $(CNAME).dylib $(CNAME).o $(FSNAME).exe
 
 tests: $(CNAME).dylib
-	fsharpc -r:FsCheck/FsCheck.dll $(JSENGINE).fs $(JSUTILS).fs $(FSNAME1).fs $(FSNAME2).fs $(FSTEST).fs
+	fsharpc -r:FsCheck/FsCheck.dll $(JSENGINE).fs $(JSUTILS).fs $(UTILS).fs $(FSNAME1).fs $(FSNAME2).fs $(FSTEST).fs
 

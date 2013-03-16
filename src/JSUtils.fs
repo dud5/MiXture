@@ -37,3 +37,9 @@ let extract_array jarr length =
     let farr: nativeint array = Array.zeroCreate length
     JSEngine.extractArray(context, jarr, length, farr)
     farr
+
+let get_string (s:nativeint) =
+    let length = JSEngine.stringLength(s)
+    let sb = new System.Text.StringBuilder(length)
+    JSEngine.extractString(s, sb, length)
+    sb.ToString()

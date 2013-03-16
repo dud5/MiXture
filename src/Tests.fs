@@ -1,3 +1,5 @@
+module Mixture.Tests
+
 open FsCheck
 open Mixture
 open System.Diagnostics
@@ -98,6 +100,14 @@ let test_function_embed_ex () =
     // printf "jf(1): %d\n" (NEmbedding.project (JSUtils.execute_string("try { throw 2 } catch(err) { 3;}")))
 
 
+let test_function_embed_tupled() =
+    let add (x, y) = x+y
+    let jadd = NEmbedding.embed add
+    NEmbedding.register_values(["jadd", jadd])
+    printf "jadd(4,5): %d\n" (NEmbedding.project (JSUtils.execute_string("jadd(4,5)")))
+    printf "add(4,5): %d\n" (add (4,5))
+
+
 let test_function_project_ex() =
     // let jfib = JSUtils.execute_string("var jfib = (function fib(n) { if (n<2) {return 1;} else {return fib(n-1) + fib(n-2);}}); jfib;")
     let jfib = JSUtils.execute_string("var jfib = (function fib(n) { throw 34;}); jfib;")
@@ -153,19 +163,55 @@ let test_project_record () =
 //     let lt2: int->unit = project jlt2
 //     (NEmbedding.project (JSUtils.execute_string("lt2(1)"))) |> ignore
 //     (lt2 1) |> ignore
-    
+
+
+let test_pol_embed () =
+    let f (x:'a[]) = x.[0]
+    let jf = NEmbedding.embed f
+    NEmbedding.register_values(["jf", jf])
+    let jx = JSUtils.execute_string("jf([1,'a']);")
+    let x:int = NEmbedding.project jx
+    printf "this is x: %d\n" x
+
+// let jf = JSUtils.execute_string("(function(x) {return [x];})")
+// // let f: 'a->'a = fun x -> x
+// let f<'A> : 'A -> 'A[] = NEmbedding.project jf
+// let x: int[] = f 3
+// let y: string[] = f "a"
+// printf "this is x: %A\n" x
+// printf "this is a: %A\n" y
+
+let test_pol_proj () =
+    let jf = JSUtils.execute_string("(function(x) {return [x];})")
+    // let f: 'a->'a = fun x -> x
+    // let f<'A> : 'A -> 'A[] = NEmbedding.project jf
+    // let x: int[] = f 3
+    // let y: string[] = f "a"
+    // printf "this is x: %A\n" x
+    // printf "this is a: %A\n" y
+    // let t = f 3
+    // let a = f "A"
+    // printf "this is type of f: %A\n" (f.GetType())
+    // let projectt () : 'R = failwith "!"
+    // let dfid2<'a> : 'a -> 'a = projectt ()
+    // let f (x:'a) :'a = x
+    // let x = f 3
+    // let y = f "a"
+    printf "this is x: %d\n" 3
+    // printf "this is a: %s\n" y
 
 
 let main() =
     JSUtils.create_context() |> ignore
     Check.QuickAll<NEmbeddingTests>()
-    // test_function_embed()
-    // test_function_embed_ex()
+    test_function_embed()
+    test_function_embed_ex()
+    test_function_embed_tupled()
     // test_function_project_ex()
     // test_function_project()
     // test_function_project_unit()
-    test_embed_record()
-    test_project_record()
+    // test_embed_record()
+    // test_project_record()
+    // test_pol_proj()
 do
     main()
-

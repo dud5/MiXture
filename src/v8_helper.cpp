@@ -131,6 +131,9 @@ extern "C" Handle<Value> apply_function_arr(Persistent<Context> context,
 
 typedef Handle<Value> (*CALLBACK)(const Arguments&);
 
+// v8::Handle<v8::Value> guard_function(CALLBACK function, Contract ctc) {
+    
+// }
 
 extern "C" void register_function(Persistent<Context> context, CALLBACK cb) {
     HandleScope handle_scope;
@@ -250,22 +253,15 @@ extern "C" Handle<Value> makeBoolean(Persistent<Context> context, bool b) {
 }
 
 extern "C" Handle<Value> makeUndefined() {
-    // HandleScope handle_scope;
-    // Context::Scope context_scope(context);
-    // Persistent<Value> result = Persistent<Value>::New(FunctionTemplate::New(cb)->GetFunction());
     return Undefined();
-    // return result;
 }
 
 extern "C" Handle<Value> makeNull() {
-    // HandleScope handle_scope;
-    // Context::Scope context_scope(context);
-    // Persistent<Value> result = Persistent<Value>::New(FunctionTemplate::New(cb)->GetFunction());
     return Null();
-    // return result;
 }
 
 extern "C" Handle<Value> makeFunction(Persistent<Context> context, CALLBACK cb) {
+    // Contract contract;
     HandleScope handle_scope;
     Context::Scope context_scope(context);
     Persistent<Value> result = Persistent<Value>::New(FunctionTemplate::New(cb)->GetFunction());
