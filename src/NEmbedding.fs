@@ -4,6 +4,8 @@ open System.Runtime.InteropServices
 open Microsoft.FSharp.Reflection
 open System.Collections
 open System
+open System.Reflection
+open Microsoft.FSharp.Quotations
 
 type JSValue = nativeint
 exception JSException of JSValue
@@ -208,9 +210,13 @@ and project<'T> (x: JSValue) : 'T =
     project_hack (typeof<'T>) x |> unbox<'T>
 
 and embed_func (x:obj) =
-    let f = fun (arg: JSValue[]) ->
+    // f is a function JSValue -> JSValue, which takes a JavaScript
+    // Arguments object and returns the embedded result
+    let f (args: JSValue) =
+        let arg = args |> JSUtils.get_all_JS_arguments JSUtils.context
         let domain = FSharpType.GetFunctionElements (x.GetType()) |> fst
         let projected_args =
+            // if the function expects a tuple, process the array args through project and build the appropriate tuple
             if FSharpType.IsTuple domain then
                 let proj_args_array = Array.map2 project_reflection (FSharpType.GetTupleElements domain) arg
                 [| FSharpValue.MakeTuple(proj_args_array, domain) |]
@@ -220,10 +226,7 @@ and embed_func (x:obj) =
         with
             | exn -> JSEngine.throwException(JSUtils.context, embed exn)
 
-    let nativef (args: JSValue) =
-        let processed_args = args |> JSUtils.get_all_JS_arguments JSUtils.context
-        f (processed_args)
-    JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(nativef))
+    JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(f))
 
 and project_func ty (f:JSValue list -> JSValue) : obj =
     let range = FSharpType.GetFunctionElements ty |> snd
@@ -333,3 +336,18 @@ let register_values (l: (string * JSValue) list) =
     let register_value (name, value) =
         JSEngine.registerValue(JSUtils.context, name, value)
     List.iter register_value l
+
+
+type Signature =
+    Sign of (System.Type[] * System.Type[])
+
+let create_signature (e:Expr) =
+    let gmi, args =
+        match e with
+            | DerivedPatterns.Lambdas(_,Patterns.Call(_,mi,args)) -> mi.GetGenericMethodDefinition(), args
+            | _ -> failwith "!"
+    let arg_types = gmi.GetParameters() |> Array.map (fun (el:ParameterInfo) -> el.ParameterType)
+    let ret_types = gmi.ReturnType
+    if FSharpType.IsTuple(ret_types) then
+        (Sign(arg_types, FSharpType.GetTupleElements(gmi.ReturnType)))
+    else (Sign(arg_types, [|ret_types|]))
