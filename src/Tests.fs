@@ -121,6 +121,16 @@ let test_function_project_ex() =
 
     printf "fib(45): %d\n" result
 
+
+let make_list (x,y) = [x;y]
+
+let test_function_embed_poly() =
+    let jmake = NEmbedding.embed_poly_func <@ make_list: ((obj*obj)->obj list) @>
+    NEmbedding.register_values(["jmake", jmake])
+    let t = JSUtils.execute_string("jmake(1,2)")
+    JSEngine.print_result(JSUtils.context, t)
+
+
 let test_function_project() =
     let jfib = JSUtils.execute_string("var jfib = (function fib(n) { if (n<2) {return 1;} else {return fib(n-1) + fib(n-2);}}); jfib;")
     let jfib = JSUtils.execute_string("var jfib = (function fib(a,b) { return a+b; }); jfib;")
@@ -204,9 +214,10 @@ let test_pol_proj () =
 let main() =
     JSUtils.create_context() |> ignore
     Check.QuickAll<NEmbeddingTests>()
-    test_function_embed()
-    test_function_embed_ex()
-    test_function_embed_tupled()
+    // test_function_embed()
+    // test_function_embed_ex()
+    // test_function_embed_tupled()
+    test_function_embed_poly()
     // test_function_project_ex()
     // test_function_project()
     // test_function_project_unit()

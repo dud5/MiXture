@@ -6,11 +6,13 @@ open System.Collections
 open System
 open System.Reflection
 open Microsoft.FSharp.Quotations
+open Microsoft.FSharp.Linq.QuotationEvaluation
 
 type JSValue = nativeint
 exception JSException of JSValue
 
 let mutable context = nativeint(-1)
+
 
 let (|Boolean|_|) (b:JSValue) =
     if JSEngine.isBoolean(b) then Some(JSEngine.extractBoolean(b))
@@ -50,6 +52,13 @@ let (|Array|_|) (arr:JSValue) =
     if JSEngine.isArray(arr) then
         Some()
     else None
+
+let deduce_type = function
+    | Boolean _ -> typeof<bool>
+    | Integer _ -> typeof<int>
+    | Number _ -> typeof<float>
+    | String _ -> typeof<string>
+    | _ -> failwith "!"
 
 
 // Embed-project pair
@@ -189,6 +198,7 @@ and project_reflection ty (x:JSValue) : obj =
         // we don't know what we want, let's see what we can get
         match x with
             | Boolean b -> project_reflection typeof<bool> x
+            | Integer n -> project_reflection typeof<int> x
             | Number n -> project_reflection typeof<float> x
             | String s -> project_reflection typeof<string> x
             | Array -> project_reflection typeof<obj[]> x
@@ -216,17 +226,37 @@ and embed_func (x:obj) =
         let arg = args |> JSUtils.get_all_JS_arguments JSUtils.context
         let domain = FSharpType.GetFunctionElements (x.GetType()) |> fst
         let projected_args =
-            // if the function expects a tuple, process the array args through project and build the appropriate tuple
+            // if the function expects a tuple, process the array args
+            // through project and build the appropriate tuple
             if FSharpType.IsTuple domain then
                 let proj_args_array = Array.map2 project_reflection (FSharpType.GetTupleElements domain) arg
                 [| FSharpValue.MakeTuple(proj_args_array, domain) |]
             else [| project_reflection domain (arg.[0]) |]
+
         try
-            embed (x.GetType().GetMethod("Invoke", [| domain |]).Invoke(x, projected_args))
+            embed (Utils.call_object_function x projected_args domain)
         with
             | exn -> JSEngine.throwException(JSUtils.context, embed exn)
 
     JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(f))
+
+and embed_poly_func (e:Expr) =
+    let domain, range, mi, unique_ty_domain = Utils.create_signature e
+    let f (args: JSValue) =
+        // arg: JSValue[]
+        let arg = args |> JSUtils.get_all_JS_arguments JSUtils.context
+        let proj_args_array = Array.map (project_reflection (typeof<obj>)) arg
+        let deduced_types = Array.map deduce_type arg
+        match (Utils.unify_types(domain, deduced_types, unique_ty_domain)) with
+            | Some(specialized_types) ->
+                try
+                    embed (Utils.call_generic_method_info mi specialized_types proj_args_array)
+                with
+                    | exn -> JSEngine.throwException(JSUtils.context, embed exn)
+            | None ->failwith "Types not compatible"
+
+    JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(f))
+
 
 and project_func ty (f:JSValue list -> JSValue) : obj =
     let range = FSharpType.GetFunctionElements ty |> snd
@@ -337,17 +367,3 @@ let register_values (l: (string * JSValue) list) =
         JSEngine.registerValue(JSUtils.context, name, value)
     List.iter register_value l
 
-
-type Signature =
-    Sign of (System.Type[] * System.Type[])
-
-let create_signature (e:Expr) =
-    let gmi, args =
-        match e with
-            | DerivedPatterns.Lambdas(_,Patterns.Call(_,mi,args)) -> mi.GetGenericMethodDefinition(), args
-            | _ -> failwith "!"
-    let arg_types = gmi.GetParameters() |> Array.map (fun (el:ParameterInfo) -> el.ParameterType)
-    let ret_types = gmi.ReturnType
-    if FSharpType.IsTuple(ret_types) then
-        (Sign(arg_types, FSharpType.GetTupleElements(gmi.ReturnType)))
-    else (Sign(arg_types, [|ret_types|]))
