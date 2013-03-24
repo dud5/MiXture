@@ -104,7 +104,7 @@ extern "C" Handle<Value> apply_function(Persistent<Context> context,
     return js_result;
 }
 
-extern "C" Handle<Value> apply_function_arr(Persistent<Context> context,
+extern "C" Handle<Value> apply_function_arr(Handle<Context> context,
 					    Handle<Function> func, int argc,
 					    Handle<Value>* argv, bool* is_exception) {
     HandleScope handle_scope;
@@ -260,8 +260,7 @@ extern "C" Handle<Value> makeNull() {
     return Null();
 }
 
-extern "C" Handle<Value> makeFunction(Persistent<Context> context, CALLBACK cb) {
-    // Contract contract;
+extern "C" Handle<Value> makeFunction(Persistent<Context> context, InvocationCallback cb) {
     HandleScope handle_scope;
     Context::Scope context_scope(context);
     Persistent<Value> result = Persistent<Value>::New(FunctionTemplate::New(cb)->GetFunction());
@@ -352,11 +351,6 @@ extern "C" void setProperty(Persistent<Context> context, Handle<Object> object, 
     HandleScope handle_scope;
     Context::Scope context_scope(context);
     object->Set(String::New(str), value);
-}
-
-
-extern "C" void echo(const char* str) {
-    cout << "This is a string from F# " << str << endl;
 }
 
 

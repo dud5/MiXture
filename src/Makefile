@@ -37,5 +37,5 @@ clean:
 	rm $(CNAME).dylib $(CNAME).o $(FSNAME).exe
 
 tests: $(CNAME).dylib
-	fsharpc -r:FsCheck/FsCheck.dll $(JSENGINE).fs $(JSUTILS).fs $(UTILS).fs $(FSNAME1).fs $(FSNAME2).fs $(FSTEST).fs
+	fsharpc -r:FsCheck/FsCheck.dll -r:FSharp.PowerPack.Linq.dll $(JSENGINE).fs $(JSUTILS).fs $(UTILS).fs $(FSNAME1).fs $(FSNAME2).fs $(FSTEST).fs
 

@@ -43,3 +43,5 @@ let get_string (s:nativeint) =
     let sb = new System.Text.StringBuilder(length)
     JSEngine.extractString(s, sb, length)
     sb.ToString()
+
+create_context () |> ignore

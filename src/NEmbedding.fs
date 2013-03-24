@@ -6,7 +6,6 @@ open System.Collections
 open System
 open System.Reflection
 open Microsoft.FSharp.Quotations
-open Microsoft.FSharp.Linq.QuotationEvaluation
 
 type JSValue = nativeint
 exception JSException of JSValue
@@ -120,9 +119,8 @@ let unit =
 /// <param name="ty">The <c>Type</c> value that specifies the type of the value being embedded</param>
 /// <param name="x">The value that is being embedded</param>
 /// <return>A value of type <c>JSValue</c> which is the JavaScript equivalent of <c>x</c></return>
-let rec embed_reflection ty (x:obj) =
-    // let ty = x.GetType()
-    // WHY NOT USE THE PREVIOUS LINE AND embed only passes x?
+let rec embed_reflection (x:obj) =
+    let ty = x.GetType()
     if ty = typeof<string> then string.embed(x:?>string)
     elif ty = typeof<float> then float.embed(x:?>float)
     elif ty = typeof<int> then int.embed(x:?>int)
@@ -154,7 +152,7 @@ let rec embed_reflection ty (x:obj) =
 // this fails with null (gettype)
 and embed (x:obj) : JSValue =
     if box x = null then unit.embed()
-    else embed_reflection (x.GetType()) x
+    else embed_reflection x
 
 /// <summary>Projects a <c>JSValue</c> into an F# value, using type information provided</summary>
 /// <param name="ty">The <c>Type</c> value that specifies what type the F# should have
@@ -172,7 +170,6 @@ and project_hack ty (x:obj) : obj =
 
 and project_reflection ty (x:JSValue) : obj =
     // if JSEngine.isException(x) then raise JSException
-    
     if ty = typeof<string> then string.project(x) |> box
     elif ty = typeof<float> then float.project(x) |> box
     elif ty = typeof<int> then int.project(x) |> box
@@ -238,7 +235,9 @@ and embed_func (x:obj) =
         with
             | exn -> JSEngine.throwException(JSUtils.context, embed exn)
 
-    JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(f))
+    let callback = new JSEngine.FSharpFunction(f)
+    let gch = GCHandle.Alloc(callback)
+    JSEngine.makeFunction(JSUtils.context, callback)
 
 and embed_poly_func (e:Expr) =
     let domain, range, mi, unique_ty_domain = Utils.create_signature e
@@ -255,7 +254,9 @@ and embed_poly_func (e:Expr) =
                     | exn -> JSEngine.throwException(JSUtils.context, embed exn)
             | None ->failwith "Types not compatible"
 
-    JSEngine.makeFunction(JSUtils.context, new JSEngine.FSharpFunction(f))
+    let callback = new JSEngine.FSharpFunction(f)
+    let gch = GCHandle.Alloc(callback)
+    JSEngine.makeFunction(JSUtils.context, callback)
 
 
 and project_func ty (f:JSValue list -> JSValue) : obj =
@@ -264,6 +265,16 @@ and project_func ty (f:JSValue list -> JSValue) : obj =
         FSharpValue.MakeFunction(ty, fun arg -> project_hack range (fun t -> f (embed arg :: t)))
     else
         FSharpValue.MakeFunction(ty, fun arg -> project_hack range ( f [embed arg]))
+
+// and project_poly_func<'T> (x: JSValue) : 'T =
+//     match x with
+//         | Function f -> failwith "!"
+//         | _ -> failwith "Not a function!"
+
+// let ttt<'T> (x:int) : ('T) =
+    
+//     (Unchecked.defaultof<'T>)
+
 
 and embed_ienumerable (x: IEnumerable) =
     let length = x.GetType().GetProperty("Length").GetValue(x, null) :?> int
@@ -353,11 +364,11 @@ let list ty=
     { embed = embed_ienumerable ;
       project = project_list ty}
 
-let func =
-    { embed = embed_func ;
-      // don't need project
-      project = fun x r -> failwith "can't project a fnc" }
-      // project = project_func }
+// let func =
+//     { embed = fst << embed_func ;
+//       // don't need project
+//       project = fun x r -> failwith "can't project a fnc" }
+//       // project = project_func }
 
 /// <summary>Registers a <c>JSValue</c> in the global object of JavaScript</summary>
 /// <param name="l">The list of tuples containing the name and the <c/>JSValue> to be assigned to</param>
