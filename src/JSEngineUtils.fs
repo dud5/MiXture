@@ -14,7 +14,7 @@ type FSharpFunction = delegate of nativeint -> nativeint
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint apply_function_arr(nativeint, nativeint, int, nativeint[], [<Out>] bool& is_ex)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-extern nativeint execute_string(nativeint, string)
+extern nativeint execute_string(nativeint, string, [<Out>] bool& is_ex)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern void print_result(nativeint, nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]

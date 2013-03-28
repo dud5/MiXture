@@ -82,9 +82,9 @@ let rec factorial x =
 
 
 let test_function_embed() =
-    let jfib = NEmbedding.embed fib
-    NEmbedding.register_values(["jfib", jfib])
-    printf "jfib(45): %d\n" (NEmbedding.project (JSUtils.execute_string("jfib(45)")))
+    // let jfib = NEmbedding.embed fib
+    // NEmbedding.register_values(["jfib", jfib])
+    // printf "jfib(45): %d\n" (NEmbedding.project (JSUtils.execute_string("jfib(45)")))
     printf "fib(45): %d\n" (fib 45)
 
 exception AA of int*string
@@ -119,13 +119,14 @@ let test_function_project_ex() =
         with
             | Mixture.NEmbedding.JSException(x) -> NEmbedding.project x
 
-    printf "fib(45): %d\n" result
+    printf "fib(45) with exception: %d\n" result
 
 
 let make_list (x,y) = [x;y]
 
+
 let test_function_embed_poly() =
-    let jmake = NEmbedding.embed_poly_func <@ make_list: ((obj*obj)->obj list) @>
+    let jmake = NEmbedding.embed_poly_func <@ make_list @>
     NEmbedding.register_values(["jmake", jmake])
     let t = JSUtils.execute_string("jmake(1,2)")
     JSEngine.print_result(JSUtils.context, t)
@@ -136,7 +137,7 @@ let test_function_project() =
     let jfib = JSUtils.execute_string("var jfib = (function fib(a,b) { return a+b; }); jfib;")
 
     let fib: int->int->int = project jfib
-    // printf "jfib(45): %d\n" (NEmbedding.project (JSUtils.execute_string("jfib(45)")))
+    printf "jfib(45): %d\n" (NEmbedding.project (JSUtils.execute_string("jfib(45)")))
     let result =
         try
             fib 10 5
@@ -158,14 +159,14 @@ let test_embed_record () =
     JSEngine.print_result(JSUtils.context, JSUtils.execute_string("jhp.Url"))
 
 let test_project_record () =
-    let jhomepage = JSUtils.execute_string("({Title:'Eduardo Munoz', Url:'edua.rdomunoz.com'})")
-    let hp: website = project jhomepage
+    let jhp = JSUtils.execute_string("({Title:'Eduardo Munoz', Url:'edua.rdomunoz.com'})")
+    let hp: website = project jhp
     printf "This is hp: %A\n" hp
-    // JSEngine.print_result(JSUtils.context, jhp)
-    // NEmbedding.register_values(["jhp", jhp])
-    // JSEngine.print_result(JSUtils.context, JSUtils.execute_string("jhp.Title"))
-    // JSEngine.print_result(JSUtils.context, JSUtils.execute_string("jhp.Url"))
-    // JSEngine.print_result(JSUtils.context, JSUtils.execute_string("jhp.Add1(41)"))
+    JSEngine.print_result(JSUtils.context, jhp)
+    NEmbedding.register_values(["jhp", jhp])
+    JSEngine.print_result(JSUtils.context, JSUtils.execute_string("jhp.Title"))
+    JSEngine.print_result(JSUtils.context, JSUtils.execute_string("jhp.Url"))
+    JSEngine.print_result(JSUtils.context, JSUtils.execute_string("jhp.Add1(41)"))
 
 
 // let test_function_project_unit() =
@@ -212,13 +213,13 @@ let test_pol_proj () =
 
 
 let main() =
-    JSUtils.create_context() |> ignore
-    Check.QuickAll<NEmbeddingTests>()
-    // test_function_embed()
-    // test_function_embed_ex()
-    // test_function_embed_tupled()
+    // JSUtils.create_context() |> ignore
+    // Check.QuickAll<NEmbeddingTests>()
+    test_function_embed()
+    test_function_embed_ex()
+    test_function_embed_tupled()
     test_function_embed_poly()
-    // test_function_project_ex()
+    test_function_project_ex()
     // test_function_project()
     // test_function_project_unit()
     // test_embed_record()

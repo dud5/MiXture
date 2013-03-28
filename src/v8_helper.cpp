@@ -30,7 +30,9 @@ extern "C" void print_result(Persistent<Context> context, Handle<Value> val) {
     cout << *str << endl;
 }
 
-extern "C" Handle<Value> execute_string(Persistent<Context> context, const char* s) {
+extern "C" Handle<Value> execute_string(Persistent<Context> context,
+					const char* s,
+					bool* is_exception) {
     // Create a stack-allocated handle scope.
     HandleScope handle_scope;
 
@@ -45,15 +47,16 @@ extern "C" Handle<Value> execute_string(Persistent<Context> context, const char*
     Handle<Script> script = Script::Compile(source);
 
     // try-catch handler
-    TryCatch trycatch;    
+    TryCatch trycatch;
     // Run it
     Persistent<Value> result = Persistent<Value>::New(script->Run());
 
     // Script->Run() returns an empty handle if the code threw an exception
     if (result.IsEmpty()) {
+	*is_exception = true;
 	Handle<Value> exception = trycatch.Exception();
-	String::AsciiValue exception_str(exception);
-	
+	// String::AsciiValue exception_str(exception);
+	return Persistent<Value>::New(exception);	
     }
     
     return result;
@@ -124,7 +127,6 @@ extern "C" Handle<Value> apply_function_arr(Handle<Context> context,
 
     Persistent<Value> js_result = Persistent<Value>::New(result);
 
-
     return js_result;
 }
 
@@ -163,7 +165,8 @@ extern "C" Handle<Value> get_argument(Persistent<Context> context, const Argumen
 }
 
 extern "C" Handle<Value> make_FLump(Persistent<Context> context, int pointer) {
-    execute_string(context, "function FLump(pointer) { this.pointer = pointer; }");
+    bool* is_ex = false;
+    execute_string(context, "function FLump(pointer) { this.pointer = pointer; }", is_ex);
     const char* s = "new FLump(%d);";
     char script[100];
     int n = sprintf(script, s, pointer);
@@ -171,7 +174,7 @@ extern "C" Handle<Value> make_FLump(Persistent<Context> context, int pointer) {
 	cerr << "something went wrong when creating an FLump in JavaScript" << endl;
 	return Undefined();
     }
-    return execute_string(context, script);
+    return execute_string(context, script, is_ex);
 }
 
 

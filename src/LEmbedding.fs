@@ -67,7 +67,9 @@ module LumpEmbedding =
 
         // constructor initialized by executing some code in a string
         new (code) =
-            let pointer = JSEngine.execute_string(JSLump.Context, code)
+            let mutable is_exception = false
+            let pointer = JSEngine.execute_string(JSLump.Context, code, &is_exception)
+            if is_exception then failwith "Exception happened in JavaScript.\nExiting..."
             new JSLump(pointer)
 
         interface Lump with

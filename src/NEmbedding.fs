@@ -3,15 +3,22 @@ module Mixture.NEmbedding
 open System.Runtime.InteropServices
 open Microsoft.FSharp.Reflection
 open System.Collections
+open System.Collections.Generic
 open System
 open System.Reflection
 open Microsoft.FSharp.Quotations
+open JSUtils
 
 type JSValue = nativeint
 exception JSException of JSValue
 
-let mutable context = nativeint(-1)
+let pinned_handles = new Dictionary<JSValue, GCHandle>()
 
+let free_object x =
+    if pinned_handles.ContainsKey(x) then
+        pinned_handles.[x].Free(); true
+    else false
+    
 
 let (|Boolean|_|) (b:JSValue) =
     if JSEngine.isBoolean(b) then Some(JSEngine.extractBoolean(b))
@@ -26,14 +33,14 @@ let (|Number|_|) (n:JSValue) =
     else None
 
 let (|String|_|) (s:JSValue) =
-    if JSEngine.isString(s) then Some(JSUtils.get_string s)
+    if JSEngine.isString(s) then Some(get_string s)
     else None
 
 let (|Function|_|) (f:JSValue) =
     if JSEngine.isFunction(f) then
         Some(fun (args: JSValue list) ->
              let mutable is_exception = Unchecked.defaultof<bool>
-             let result = JSEngine.apply_function_arr(JSUtils.context, f, List.length args, List.toArray args, &is_exception)
+             let result = JSEngine.apply_function_arr(context, f, List.length args, List.toArray args, &is_exception)
              if is_exception then raise (JSException(result))
              else result
              )
@@ -58,6 +65,13 @@ let deduce_type = function
     | Number _ -> typeof<float>
     | String _ -> typeof<string>
     | _ -> failwith "!"
+
+
+
+let (++) (func:nativeint) (args: nativeint list) =
+  match func with
+    | Function f -> f args
+    | _ -> failwith "cannot apply a non-function"
 
 
 // Embed-project pair
@@ -237,16 +251,18 @@ and embed_func (x:obj) =
 
     let callback = new JSEngine.FSharpFunction(f)
     let gch = GCHandle.Alloc(callback)
-    JSEngine.makeFunction(JSUtils.context, callback)
+    let result = JSEngine.makeFunction(JSUtils.context, callback)
+    pinned_handles[result].Add(ghc)
+    result
 
 and embed_poly_func (e:Expr) =
-    let domain, range, mi, unique_ty_domain = Utils.create_signature e
+    let ty_variables, domain, range, mi = Utils.create_signature e
     let f (args: JSValue) =
         // arg: JSValue[]
         let arg = args |> JSUtils.get_all_JS_arguments JSUtils.context
         let proj_args_array = Array.map (project_reflection (typeof<obj>)) arg
         let deduced_types = Array.map deduce_type arg
-        match (Utils.unify_types(domain, deduced_types, unique_ty_domain)) with
+        match (Utils.unify_types(domain, deduced_types, ty_variables)) with
             | Some(specialized_types) ->
                 try
                     embed (Utils.call_generic_method_info mi specialized_types proj_args_array)
@@ -270,10 +286,6 @@ and project_func ty (f:JSValue list -> JSValue) : obj =
 //     match x with
 //         | Function f -> failwith "!"
 //         | _ -> failwith "Not a function!"
-
-// let ttt<'T> (x:int) : ('T) =
-    
-//     (Unchecked.defaultof<'T>)
 
 
 and embed_ienumerable (x: IEnumerable) =
@@ -377,4 +389,6 @@ let register_values (l: (string * JSValue) list) =
     let register_value (name, value) =
         JSEngine.registerValue(JSUtils.context, name, value)
     List.iter register_value l
+
+
 

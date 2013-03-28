@@ -1,5 +1,8 @@
 module Mixture.JSUtils
 
+type JSValue = nativeint
+exception JSException of JSValue
+
 let mutable context = nativeint(-1)
 
 let create_context () =
@@ -18,11 +21,10 @@ let get_all_JS_arguments context args =
     Array.init size init
 
 let execute_string s =
-    if context = nativeint(-1) then
-        create_context() |> ignore
-        JSEngine.execute_string(context, s)
-    else
-        JSEngine.execute_string(context, s)
+    let mutable is_exception = false
+    let result = JSEngine.execute_string(context, s, &is_exception)
+    if is_exception then raise (JSException(result))
+    else result
 
 /// <summary>Loads a JavaScript file and executes it, returning its value</summary>
 let load_file =
@@ -43,5 +45,6 @@ let get_string (s:nativeint) =
     let sb = new System.Text.StringBuilder(length)
     JSEngine.extractString(s, sb, length)
     sb.ToString()
+
 
 create_context () |> ignore
