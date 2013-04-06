@@ -108,6 +108,8 @@ extern void setProperty(nativeint, nativeint, string, nativeint, bool)
 extern nativeint getOwnPropertyNames(nativeint, nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern void getProperties(nativeint, nativeint, nativeint, int, nativeint[])
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern nativeint getProperty(nativeint, nativeint, string)
 
 
 
@@ -130,6 +132,8 @@ extern bool isNull(nativeint)
 extern bool isUndefined(nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern bool isArray(nativeint)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern bool isObject(nativeint)
 
 
 

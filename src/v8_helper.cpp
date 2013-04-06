@@ -342,9 +342,24 @@ extern "C" void getProperties(Persistent<Context> context,
     HandleScope handle_scope;
     Context::Scope context_scope(context);
     for (int i = 0; i < length; i++) {
-	result[i] = obj->Get(names->Get(i));
+	result[i] = Persistent<Value>::New(obj->Get(names->Get(i)));
     }
 }
+
+
+extern "C" Handle<Value> getProperty(Persistent<Context> context,
+			     Handle<Object> obj,
+			    const char* s) {
+    HandleScope handle_scope;
+    Context::Scope context_scope(context);
+    Handle<Value> result =  obj->Get(String::New(s));
+    if (result.IsEmpty()) {
+	return Undefined();;
+    }
+    else
+	return Persistent<Value>::New(result);
+}
+
 
 extern "C" Handle<Value> getOwnPropertyNames(Persistent<Context> context, Handle<Object> object) {
     HandleScope handle_scope;
@@ -404,6 +419,10 @@ extern "C" bool isInt32(Handle<Value> n) {
 
 extern "C" bool isArray(Handle<Value> arr) {
     return arr->IsArray();
+}
+
+extern "C" bool isObject(Handle<Value> obj) {
+    return obj->IsObject();
 }
 
 extern "C" void registerValue(Persistent<Context> context, const char* name, Handle<Value> val) {
