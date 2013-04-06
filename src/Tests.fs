@@ -148,7 +148,7 @@ let test_function_project() =
 
 type website =
     { Title : string;
-        Url : string;
+        mutable Url : string;
       }
 let test_embed_record () =
     let homepage = { Title = "Google"; Url = "http://www.google.com"; }

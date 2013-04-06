@@ -4,6 +4,7 @@ open System.Runtime.InteropServices
 
 // Represents an F# function that will be accessible from JavaScript
 type FSharpFunction = delegate of nativeint -> nativeint
+type VoidFSharpFunction = delegate of unit -> unit
 
 ///////
 /////// GENERAL UTILS
@@ -21,7 +22,10 @@ extern void print_result(nativeint, nativeint)
 extern nativeint createContext()
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern void disposeHandle(nativeint)
-
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern void makeWeak(nativeint, VoidFSharpFunction)
+[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
+extern void forceGC()
 // return a nativeint pointing to a JavaScript value that is an argument
 // in the arguments object (the third argument specifies the index)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
@@ -99,7 +103,7 @@ extern nativeint throwException(nativeint, nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint makeObjectLiteral(nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-extern void setProperty(nativeint, nativeint, string, nativeint)
+extern void setProperty(nativeint, nativeint, string, nativeint, bool)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint getOwnPropertyNames(nativeint, nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]

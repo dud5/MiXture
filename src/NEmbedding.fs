@@ -10,6 +10,7 @@ open Microsoft.FSharp.Quotations
 open JSUtils
 
 type JSValue = nativeint
+
 exception JSException of JSValue
 
 let pinned_handles = new Dictionary<JSValue, GCHandle>()
@@ -19,6 +20,7 @@ let free_object x =
         pinned_handles.[x].Free(); true
     else false
     
+
 
 let (|Boolean|_|) (b:JSValue) =
     if JSEngine.isBoolean(b) then Some(JSEngine.extractBoolean(b))
@@ -68,10 +70,10 @@ let deduce_type = function
 
 
 
-let (++) (func:nativeint) (args: nativeint list) =
-  match func with
-    | Function f -> f args
-    | _ -> failwith "cannot apply a non-function"
+// let (++) (func:nativeint) (args: nativeint list) =
+//   match func with
+//     | Function f -> f args
+//     | _ -> failwith "cannot apply a non-function"
 
 
 // Embed-project pair
@@ -252,7 +254,7 @@ and embed_func (x:obj) =
     let callback = new JSEngine.FSharpFunction(f)
     let gch = GCHandle.Alloc(callback)
     let result = JSEngine.makeFunction(JSUtils.context, callback)
-    pinned_handles[result].Add(ghc)
+    pinned_handles.[result] <- gch
     result
 
 and embed_poly_func (e:Expr) =
@@ -317,9 +319,11 @@ and embed_record r =
     // let (field_names, field_types, field_values) = record_to_string r
     // let's see if we can do it without the types
     let field_names, field_values = Utils.get_field_names (r.GetType()), Utils.get_field_values r
+    let field_writable = Utils.get_field_writable (r.GetType())
     let field_values_embedded = Array.map embed field_values
+    let name_type_writable = Array.zip3 field_names field_values_embedded field_writable
     // set properties on result with field_names as names and field_values as values
-    Array.iter2 (JSUtils.setProperty result) field_names field_values_embedded
+    Array.iter (JSUtils.setProperty result) name_type_writable
     result
 
 /// <summary>Helper function for <c>project_record</c>. Creates an array of the values required to construct a
@@ -392,3 +396,47 @@ let register_values (l: (string * JSValue) list) =
 
 
 
+
+
+
+
+type JSValue2(pointer: nativeint) =
+    let mutable disposed = false
+    let cleanup disposing =
+        printf "cleanup!\n"
+        if not disposed then
+            disposed <- true
+            if disposing then
+                printf "disposing is true!\n"
+                let clean () =
+                    free_object pointer |> ignore
+                    printf "calling clean() from c++ most likely\n"
+                    ()
+                let cb = new JSEngine.VoidFSharpFunction(clean)
+                JSEngine.makeWeak(pointer, cb)
+                ()
+    member this.Pointer = pointer
+    static member (++) (func: JSValue2, args: JSValue2 list) =
+        match func.Pointer with
+            | Function f ->
+              let pointer_args = List.map (fun (el:JSValue2) -> el.Pointer) args
+              new JSValue2(f pointer_args)
+            | _ -> failwith "cannot apply a non-function"
+
+
+    interface IDisposable with
+        member this.Dispose() =
+            cleanup(true)
+            GC.SuppressFinalize(this)
+
+
+
+
+
+
+
+let public_embed (x:obj) : JSValue2 =
+    new JSValue2(embed x)
+
+let public_project<'T> (x:JSValue2) : 'T =
+    project<'T> (x.Pointer)

@@ -5,13 +5,25 @@
 
 using namespace v8;
 using namespace std;
+typedef void (*CALLBACK)();
 
-
-extern "C" void disposeHandle(Persistent<String> prst) {
-    
-    prst.Dispose();
-    prst.Clear();
+extern "C" void disposeHandle(Persistent<Value> object, void* parameter) {
+    cout << "Hello from disposeHandle c++" << endl;
+    CALLBACK *cleanup = static_cast<CALLBACK *> (parameter);
+    (*cleanup)();
+    object.Dispose();
+    object.Clear();
 }
+
+extern "C" void makeWeak(Persistent<Value> prst, CALLBACK* cleanup) {
+    prst.MakeWeak(cleanup, disposeHandle);
+    cout << "Hello from makeWeak c++" << endl;
+}
+
+extern "C" void forceGC() {
+    while(!V8::IdleNotification()) {}; 
+}
+
 
 extern "C" Persistent<Context> createContext() {
     return Context::New();
@@ -131,13 +143,12 @@ extern "C" Handle<Value> apply_function_arr(Handle<Context> context,
 }
 
 
-typedef Handle<Value> (*CALLBACK)(const Arguments&);
 
 // v8::Handle<v8::Value> guard_function(CALLBACK function, Contract ctc) {
     
 // }
 
-extern "C" void register_function(Persistent<Context> context, CALLBACK cb) {
+extern "C" void register_function(Persistent<Context> context, InvocationCallback cb) {
     HandleScope handle_scope;
     Context::Scope context_scope(context);
 
@@ -350,10 +361,15 @@ extern "C" Handle<Value> makeObjectLiteral(Persistent<Context> context) {
     return object;
 }
 
-extern "C" void setProperty(Persistent<Context> context, Handle<Object> object, const char* str, Handle<Value> value) {
+extern "C" void setProperty(Persistent<Context> context,
+			    Handle<Object> object,
+			    const char* str,
+			    Handle<Value> value,
+                            bool writable) {
     HandleScope handle_scope;
     Context::Scope context_scope(context);
-    object->Set(String::New(str), value);
+    int attrs = writable ? 0: ReadOnly;
+    object->Set(String::New(str), value, PropertyAttribute(attrs | DontDelete));
 }
 
 

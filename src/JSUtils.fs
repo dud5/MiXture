@@ -30,8 +30,8 @@ let execute_string s =
 let load_file =
     System.IO.File.ReadAllText >> execute_string
 
-let setProperty (o: nativeint) (name: string) (value: nativeint) =
-    JSEngine.setProperty(context, o, name, value)
+let setProperty (o: nativeint) (name: string, value: nativeint, writable: bool)=
+    JSEngine.setProperty(context, o, name, value, writable)
 
 let makeObjectLiteral = JSEngine.makeObjectLiteral
 
