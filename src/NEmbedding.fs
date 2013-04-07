@@ -323,8 +323,7 @@ and project_list (ty: System.Type) (jlist: _JSValue)  =
     let addmi = li.GetType().GetMethod("Add", [|ty|])
     for e in arr do
         addmi.Invoke(li, [|e|]) |> ignore
-    let (_,_,_,ofseq) = Utils.create_signature <@List.ofSeq@>
-    Utils.call_generic_method_info ofseq [|ty|] [|li|]
+    Utils.call_generic_method_info Utils.listofseq [|ty|] [|li|]
 
 
 // and project_list<'T> (jlist: _JSValue): 'T list =

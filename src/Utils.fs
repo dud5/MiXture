@@ -79,3 +79,6 @@ let create_signature (e:Expr) =
     if FSharpType.IsTuple(ret_types) then
         (unique_ty_domain, arg_types, FSharpType.GetTupleElements(gmi.ReturnType), gmi)
     else (unique_ty_domain, arg_types, [|ret_types|], gmi)
+
+
+let (_,_,_,listofseq) = create_signature <@List.ofSeq@>
