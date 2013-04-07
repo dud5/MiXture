@@ -201,7 +201,7 @@ and project_reflection ty (x:_JSValue) : obj =
 
     elif ty.IsGenericType && ty.GetGenericTypeDefinition() = typedefof<list<_>> then
         let el_ty = ty.GetGenericArguments().[0]
-        box <| project_list el_ty x
+        (project_list el_ty x) |> box
 
     elif ty.IsArray then
         // GetMethod.MageGeneric.Invoke
@@ -234,7 +234,9 @@ and project_reflection ty (x:_JSValue) : obj =
 /// <param name="x">The <c/>_JSValue> that is being projected</param>
 /// <return>A value of type <c>'T</c> which is the F# equivalent of <c>x</c></return>
 and project<'T> (x: _JSValue) : 'T =
-    project_hack (typeof<'T>) x |> unbox<'T>
+    let ty = typeof<'T>
+    
+    project_hack ty x |> unbox<'T>
 
 and embed_func (x:obj) =
     // f is a function _JSValue -> _JSValue, which takes a JavaScript
@@ -314,8 +316,19 @@ and project_array ty (jarr: _JSValue) =
 // temporarily using floats just to test it works
 // and project_list : _JSValue -> float list = (project_array typeof<obj>) >> Array.toList
 // and project_list ty = (project_array ty ) >> Array.toList
-and project_list ty : _JSValue -> float list = fun x -> [1.1]
-// and project_list<'T> : _JSValue -> 'T list = (project_array typeof<'T>) >> Array.toList<'T>
+
+and project_list (ty: System.Type) (jlist: _JSValue)  =
+    let arr = project_array ty jlist
+    let li = typedefof<List<_>>.MakeGenericType([|ty|]).GetConstructors().[0].Invoke([||])
+    let addmi = li.GetType().GetMethod("Add", [|ty|])
+    for e in arr do
+        addmi.Invoke(li, [|e|]) |> ignore
+    let (_,_,_,ofseq) = Utils.create_signature <@List.ofSeq@>
+    Utils.call_generic_method_info ofseq [|ty|] [|li|]
+
+
+// and project_list<'T> (jlist: _JSValue): 'T list =
+//   ((project_array (typeof<'T>) jlist) :?> 'T[]) |> Array.toList<'T>
 
 
 and embed_record r =
@@ -380,9 +393,9 @@ let array ty =
       // TODO get rid of float, is this even useful?
       project = project_array ty }
 
-let list ty=
-    { embed = embed_ienumerable ;
-      project = project_list ty}
+// let list ty=
+//     { embed = embed_ienumerable ;
+//       project = project_list ty}
 
 // let func =
 //     { embed = fst << embed_func ;
@@ -420,14 +433,14 @@ type JSValue2(pointer: nativeint) =
                 JSEngine.makeWeak(pointer, cb)
                 ()
     member this.Pointer = pointer
-    static member (++) (func: JSValue2, args: JSValue2 list) =
+    static member ( *@ ) (func: JSValue2, args: JSValue2 list) =
         match func.Pointer with
             | Function f ->
               let pointer_args = List.map (fun (el:JSValue2) -> el.Pointer) args
               new JSValue2(f pointer_args)
             | _ -> failwith "cannot apply a non-function"
 
-    static member (+++) (o: JSValue2, property: string) =
+    static member ( +> ) (o: JSValue2, property: string) =
         match o.Pointer with
             | Object ->
               let r = JSEngine.getProperty(JSUtils.context, o.Pointer, property)
