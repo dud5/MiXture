@@ -85,3 +85,5 @@ let (_,_,_,listofseq) = create_signature <@List.ofSeq@>
 
 let float2string = sprintf "%f"
 let int2string = sprintf "%i"
+
+let containsNull (src:string) = src.Contains("\000")
