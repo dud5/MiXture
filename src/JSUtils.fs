@@ -26,6 +26,7 @@ let execute_string s =
     if is_exception then raise (JSException(result))
     else result
 
+
 /// <summary>Loads a JavaScript file and executes it, returning its value</summary>
 let load_file =
     System.IO.File.ReadAllText >> execute_string

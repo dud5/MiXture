@@ -12,6 +12,9 @@ open JSUtils
 type _JSValue = JSUtils.JSValue
 
 exception JSException of _JSValue
+exception ProjectException of string
+exception EmbedException of string
+
 
 let pinned_handles = new Dictionary<_JSValue, GCHandle>()
 
@@ -161,9 +164,8 @@ let rec embed_reflection (x:obj) =
     elif (FSharpType.IsRecord ty) then
         embed_record x
     else
-        printf "trying to embed a value of unknown type:\n"
-        printf "%A\n" ty
-        failwith "trying to embed something i don't know how to"
+        let error_message = sprintf "Can't embed values of type %A" ty
+        raise (EmbedException(error_message))
 
 
 /// <summary>Embeds a value into an <c>JSvalue</c>
@@ -194,6 +196,7 @@ and project_reflection ty (x:_JSValue) : obj =
     elif ty = typeof<float> then float.project(x) |> box
     elif ty = typeof<int> then int.project(x) |> box
     elif ty = typeof<bool> then boolean.project(x) |> box
+    elif ty = typeof<unit> then null
     elif (FSharpType.IsFunction ty) then
         match x with
             | Function f -> project_func ty f
@@ -219,14 +222,13 @@ and project_reflection ty (x:_JSValue) : obj =
             | Number n -> project_reflection typeof<float> x
             | String s -> project_reflection typeof<string> x
             | Array -> project_reflection typeof<obj[]> x
+            | Undefined -> null
             // | Function f ->
             | _ -> failwith ""
     else
-        printf "I don't know how to project this\n"
-        printf "type specified: %A\n" ty
-        printf "value in JS: "
-        JSEngine.print_result(JSUtils.context, x)
-        failwith "Could not project a value"
+//        JSEngine.print_result(JSUtils.context, x)
+        let error_message = sprintf "Can't project to type %A." ty
+        raise (ProjectException(error_message))
 
 
 /// <summary>Projects a <c>_JSValue</c> into an F# value,
@@ -266,7 +268,6 @@ and embed_func (x:obj) =
 and embed_poly_func (e:Expr) =
     let ty_variables, domain, range, mi = Utils.create_signature e
     let f (args: _JSValue) =
-        // arg: _JSValue[]
         let arg = args |> JSUtils.get_all_JS_arguments JSUtils.context
         let proj_args_array = Array.map (project_reflection (typeof<obj>)) arg
         let deduced_types = Array.map deduce_type arg
@@ -464,3 +465,6 @@ let public_embed (x:obj) : JSValue2 =
 
 let public_project<'T> (x:JSValue2) : 'T =
     project<'T> (x.Pointer)
+
+let public_execute_string s=
+    new JSValue2 (JSUtils.execute_string s)
