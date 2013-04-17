@@ -25,7 +25,7 @@ let execute_string s =
     let result = JSEngine.execute_string(context, s, &is_exception)
     if is_exception then raise (JSException(result))
     else result
-
+    
 
 /// <summary>Loads a JavaScript file and executes it, returning its value</summary>
 let load_file =
@@ -46,6 +46,5 @@ let get_string (s:nativeint) =
     let sb = new System.Text.StringBuilder(length)
     JSEngine.extractString(s, sb, length)
     sb.ToString()
-
 
 create_context () |> ignore

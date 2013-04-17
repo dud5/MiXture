@@ -1,4 +1,4 @@
-module Mixture.Tests
+module Mixture
 
 open FsCheck
 open Mixture

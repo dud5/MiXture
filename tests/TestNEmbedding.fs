@@ -77,7 +77,7 @@ type Generators =
 
                     
 [<TestFixture>]              
-type NEmbedding_INVALID() =                                                                                                                              
+type Invalid() =                                                                                                                              
     [<Test>]
     member this.FSObject() =
         let x = "({Url: 200})"
@@ -95,7 +95,7 @@ type NEmbedding_INVALID() =
         |> ignore
 
 [<TestFixture>]
-type NEmbedding_VALID() = 
+type Valid() = 
     [<Test>]
     member this.PositiveIntegers () =
         fsCheck "Positive integers - check for valid" (Prop.forAll (Arb.fromGen Generators.JSValuePosIntGen)

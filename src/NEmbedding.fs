@@ -152,7 +152,8 @@ let rec embed_reflection (x:obj) =
     elif ty.IsArray then embed_ienumerable(x :?> IEnumerable)
     elif (FSharpType.IsFunction ty) then
         embed_func(x)
-
+    elif (FSharpType.IsTuple ty) then
+        embed_tuple x
     elif (FSharpType.IsExceptionRepresentation ty) then
         let fields = FSharpValue.GetExceptionFields x
         let js_fields = embed fields
@@ -211,6 +212,9 @@ and project_reflection ty (x:_JSValue) : obj =
         let el_ty = ty.GetElementType()
         (project_array el_ty x) |> box
 
+    elif (FSharpType.IsTuple ty) then
+        project_tuple ty x
+
     elif (FSharpType.IsRecord ty) then
         project_record ty x
 
@@ -237,7 +241,6 @@ and project_reflection ty (x:_JSValue) : obj =
 /// <return>A value of type <c>'T</c> which is the F# equivalent of <c>x</c></return>
 and project<'T> (x: _JSValue) : 'T =
     let ty = typeof<'T>
-    
     project_hack ty x |> unbox<'T>
 
 and embed_func (x:obj) =
@@ -326,11 +329,6 @@ and project_list (ty: System.Type) (jlist: _JSValue)  =
         addmi.Invoke(li, [|e|]) |> ignore
     Utils.call_generic_method_info Utils.listofseq [|ty|] [|li|]
 
-
-// and project_list<'T> (jlist: _JSValue): 'T list =
-//   ((project_array (typeof<'T>) jlist) :?> 'T[]) |> Array.toList<'T>
-
-
 and embed_record r =
     let result = JSUtils.makeObjectLiteral(JSUtils.context)
     // let (field_names, field_types, field_values) = record_to_string r
@@ -387,6 +385,20 @@ and project_record ty (x:_JSValue) =
             with
                 exn -> failwith "Projection into a record failed when creating the record"
 
+and embed_tuple tu =
+    let elements = FSharpValue.GetTupleFields tu
+    embed_ienumerable elements
+    
+
+and project_tuple (ty: System.Type) (x:_JSValue) =
+    let length = JSEngine.getArrayLength(JSUtils.context, x)
+    let tyArr = FSharpType.GetTupleElements ty
+    if tyArr.Length <> length then raise (ProjectException "Tuple type does not match JavaScript array")
+    let _JSValArr = JSUtils.extract_array x length
+    let objArr = Array.map2 (fun t el -> project_hack t el) tyArr _JSValArr
+    let result = FSharpValue.MakeTuple(objArr, ty)
+    result
+
 let array ty =
     { embed = embed_ienumerable ;
       // might need to pass some type information to project
@@ -406,15 +418,6 @@ let array ty =
 /// <summary>Registers a <c>_JSValue</c> in the global object of JavaScript</summary>
 /// <param name="l">The list of tuples containing the name and the <c/>_JSValue> to be assigned to</param>
 /// <return><c>Unit</c></return>
-let register_values (l: (string * _JSValue) list) =
-    let register_value (name, value) =
-        JSEngine.registerValue(JSUtils.context, name, value)
-    List.iter register_value l
-
-
-
-
-
 
 
 type JSValue2(pointer: nativeint) =
@@ -468,3 +471,13 @@ let public_project<'T> (x:JSValue2) : 'T =
 
 let public_execute_string s=
     new JSValue2 (JSUtils.execute_string s)
+
+
+let public_register_values (l: (string * JSValue2) list) =
+    let register_value (name, value:JSValue2) =
+        JSEngine.registerValue(JSUtils.context, name, value.Pointer)
+    List.iter register_value l
+
+let print (s:string) = printfn "%s" s
+
+public_register_values [("print", public_embed print); ("readline", public_embed System.Console.ReadLine)]
