@@ -15,15 +15,12 @@ exception JSException of _JSValue
 exception ProjectException of string
 exception EmbedException of string
 
-
 let pinned_handles = new Dictionary<_JSValue, GCHandle>()
 
 let free_object x =
   if pinned_handles.ContainsKey(x) then
     pinned_handles.[x].Free(); true
   else false
-
-
 
 let (|Boolean|_|) (b:_JSValue) =
   if JSEngine.isBoolean(b) then Some(JSEngine.extractBoolean(b))
@@ -75,14 +72,6 @@ let deduce_type = function
   | String _ -> typeof<string>
   | _ -> failwith "!"
 
-
-
-// let (++) (func:nativeint) (args: nativeint list) =
-//   match func with
-//     | Function f -> f args
-//     | _ -> failwith "cannot apply a non-function"
-
-
 // Embed-project pair
 type ('a, 'b) ep = { embed : 'a -> 'b; project: 'b -> 'a }
 
@@ -95,23 +84,29 @@ let float =
           JSEngine.makeInfinity(JSUtils.context, true)
           else JSEngine.makeFloat(JSUtils.context, x) ;
 
-    project = function Number x -> x | _ -> failwith "tried to project a nonfloat" }
+    project = function 
+            | Number x -> x
+            | _ -> raise (ProjectException "tried to project a nonfloat") }
 
 
 let string =
     { embed = fun s -> JSEngine.makeString(JSUtils.context, s);
-      project = function String s -> s | _ -> failwith "tried to project a nonstring" }
+      project = function
+            | String s -> s
+            | _ -> raise (ProjectException "tried to project a nonstring") }
 
 
 let int =
     { embed = fun n -> JSEngine.makeFloat(JSUtils.context, Utils.to_float n);
       project = function
-          | Integer n ->
-              // printf "USing Integer %d\n" n
-              n
+          | Integer n ->  n
           | Number x ->
-              if x = Utils.to_float (int x) then (int x) else failwith "tried to project a float or it's outside the valid range"
-          | _ -> failwith "tried to project a non int" }
+              if x = Utils.to_float (int x) then
+                  int x
+              else
+                  raise(ProjectException "tried to project a float or it's outside the valid range")
+          | z ->
+                raise (ProjectException "tried to project a nonint") }
 
 let boolean =
     { embed = fun (b: bool) -> JSEngine.makeBoolean(JSUtils.context, b) ;
@@ -127,15 +122,7 @@ let unit =
     { embed  = fun () -> JSEngine.makeUndefined() ;
       project = function
           | Undefined -> ()
-          | _ -> failwith "tried to project a not undefined" }
-
-
-// let jnull =
-//     { embed = fun () -> JSEngine.makeNull() ;
-//       project = function
-//           | Null -> null
-//           | _ -> failwith "tried to project a not null" }
-
+          | _ -> raise (ProjectException "tried to project a not undefined") }
 
 
 /// <summary>Embeds a value into an <c>JSvalue</c>, using type information provided
@@ -148,7 +135,8 @@ let rec embed_reflection (x:obj) =
     elif ty = typeof<float> then float.embed(x:?>float)
     elif ty = typeof<int> then int.embed(x:?>int)
     elif ty = typeof<bool> then boolean.embed(x:?>bool)
-    elif ty.IsGenericType && ty.GetGenericTypeDefinition() = typedefof<list<_>> then embed_ienumerable(x :?> IEnumerable)
+    elif ty.IsGenericType && ty.GetGenericTypeDefinition() = typedefof<list<_>> then
+        embed_ienumerable(x :?> IEnumerable)
     elif ty.IsArray then embed_ienumerable(x :?> IEnumerable)
     elif (FSharpType.IsFunction ty) then
         embed_func(x)
@@ -181,18 +169,18 @@ and embed (x:obj) : _JSValue =
 /// <param name="ty">The <c>Type</c> value that specifies what type the F# should have
 /// <param name="x">The <c>_JSValue</c> that is being projected
 /// <return>A value of type <c>ty</c> which is the F# equivalent of <c>x</c></return>
-and project_hack ty (x:obj) : obj =
+and project_aux ty (x:obj) : obj =
     match x with
         | :? _JSValue as jx -> project_reflection ty jx
         | :? (_JSValue list -> _JSValue) as f ->
             if FSharpType.IsFunction (x.GetType()) && FSharpType.IsFunction ty then
                 project_func ty f
-            else failwith "function nonfunction"
-        | _ -> failwith "faillllllll"
+            else
+                raise (ProjectException "Function nonfunction")
+        | _ -> raise (ProjectException "Trying to project a non JavaScript handle")
 
 
 and project_reflection ty (x:_JSValue) : obj =
-    // if JSEngine.isException(x) then raise JSException
     if ty = typeof<string> then string.project(x) |> box
     elif ty = typeof<float> then float.project(x) |> box
     elif ty = typeof<int> then int.project(x) |> box
@@ -201,14 +189,16 @@ and project_reflection ty (x:_JSValue) : obj =
     elif (FSharpType.IsFunction ty) then
         match x with
             | Function f -> project_func ty f
-            | _ -> failwith "trying to project a nonfunction"
+            | _ ->
+                let error_message = sprintf "Can't project to type %A." ty
+                JSEngine.print_result(JSUtils.context, x)
+                raise (ProjectException error_message)
 
     elif ty.IsGenericType && ty.GetGenericTypeDefinition() = typedefof<list<_>> then
         let el_ty = ty.GetGenericArguments().[0]
         (project_list el_ty x) |> box
 
     elif ty.IsArray then
-        // GetMethod.MageGeneric.Invoke
         let el_ty = ty.GetElementType()
         (project_array el_ty x) |> box
 
@@ -227,12 +217,13 @@ and project_reflection ty (x:_JSValue) : obj =
             | String s -> project_reflection typeof<string> x
             | Array -> project_reflection typeof<obj[]> x
             | Undefined -> null
-            // | Function f ->
-            | _ -> failwith ""
+            | _ ->
+                JSEngine.print_result(context, x)
+                raise (ProjectException "I don't know what type to project this to")
+
     else
-//        JSEngine.print_result(JSUtils.context, x)
         let error_message = sprintf "Can't project to type %A." ty
-        raise (ProjectException(error_message))
+        raise (ProjectException error_message)
 
 
 /// <summary>Projects a <c>_JSValue</c> into an F# value,
@@ -240,8 +231,10 @@ and project_reflection ty (x:_JSValue) : obj =
 /// <param name="x">The <c/>_JSValue> that is being projected</param>
 /// <return>A value of type <c>'T</c> which is the F# equivalent of <c>x</c></return>
 and project<'T> (x: _JSValue) : 'T =
-    let ty = typeof<'T>
-    project_hack ty x |> unbox<'T>
+    if JSEngine.isUndefined(x) then Unchecked.defaultof<_>
+    else
+        let ty = typeof<'T>
+        project_aux ty x |> unbox<'T>
 
 and embed_func (x:obj) =
     // f is a function _JSValue -> _JSValue, which takes a JavaScript
@@ -261,7 +254,6 @@ and embed_func (x:obj) =
             embed (Utils.call_object_function x projected_args domain)
         with
             | exn -> JSEngine.throwException(JSUtils.context, embed exn)
-
     let callback = new JSEngine.FSharpFunction(f)
     let gch = GCHandle.Alloc(callback)
     let result = JSEngine.makeFunction(JSUtils.context, callback)
@@ -290,16 +282,10 @@ and embed_poly_func (e:Expr) =
 and project_func ty (f:_JSValue list -> _JSValue) : obj =
     let range = FSharpType.GetFunctionElements ty |> snd
     if FSharpType.IsFunction range then
-        FSharpValue.MakeFunction(ty, fun arg -> project_hack range (fun t -> f (embed arg :: t)))
+        FSharpValue.MakeFunction(ty, fun arg -> project_aux range (fun t -> f (embed arg :: t)))
     else
-        FSharpValue.MakeFunction(ty, fun arg -> project_hack range ( f [embed arg]))
-
-// and project_poly_func<'T> (x: _JSValue) : 'T =
-//     match x with
-//         | Function f -> failwith "!"
-//         | _ -> failwith "Not a function!"
-
-
+        FSharpValue.MakeFunction(ty, fun arg -> project_aux range ( f [embed arg]))
+        
 and embed_ienumerable (x: IEnumerable) =
     let length = x.GetType().GetProperty("Length").GetValue(x, null) :?> int
     let res = JSEngine.makeArray(JSUtils.context, length)
@@ -313,13 +299,8 @@ and project_array ty (jarr: _JSValue) =
     let length = JSEngine.getArrayLength(JSUtils.context, jarr)
     let farr = JSUtils.extract_array jarr length
     let result = System.Array.CreateInstance(ty, length)
-    Array.iteri (fun index el -> result.SetValue(project_hack ty el, index)) farr
+    Array.iteri (fun index el -> result.SetValue(project_aux ty el, index)) farr
     result
-
-// TODO: how to specify the type of list I want from a System.Type?
-// temporarily using floats just to test it works
-// and project_list : _JSValue -> float list = (project_array typeof<obj>) >> Array.toList
-// and project_list ty = (project_array ty ) >> Array.toList
 
 and project_list (ty: System.Type) (jlist: _JSValue)  =
     let arr = project_array ty jlist
@@ -331,13 +312,13 @@ and project_list (ty: System.Type) (jlist: _JSValue)  =
 
 and embed_record r =
     let result = JSUtils.makeObjectLiteral(JSUtils.context)
-    // let (field_names, field_types, field_values) = record_to_string r
-    // let's see if we can do it without the types
     let field_names, field_values = Utils.get_field_names (r.GetType()), Utils.get_field_values r
     let field_writable = Utils.get_field_writable (r.GetType())
     let field_values_embedded = Array.map embed field_values
-    let name_type_writable = Array.zip3 field_names field_values_embedded field_writable
-    // set properties on result with field_names as names and field_values as values
+    let name_type_writable =
+        Array.zip3 field_names field_values_embedded field_writable
+    // set properties on result with field_names
+    // as names and field_values as values
     Array.iter (JSUtils.setProperty result) name_type_writable
     result
 
@@ -350,14 +331,17 @@ and embed_record r =
 and project_object_properties ty x (r_field_names: string[]) =
     // project each value from x to the appropriate type according to r_field_types
     let j_field_values: nativeint array = Array.zeroCreate r_field_names.Length
-    // TODO: shouldn't need to embed the names, try passing a string array?
-    JSEngine.getProperties(JSUtils.context, x, embed r_field_names, r_field_names.Length, j_field_values)
+    JSEngine.getProperties(JSUtils.context,
+        x,
+        embed r_field_names,
+        r_field_names.Length,
+        j_field_values)
     let r_field_types = Utils.get_field_types ty
     let r_values =
-        try
-            Array.map2 (fun value_type value -> project_hack value_type value) r_field_types j_field_values
-        with
-            exn -> failwith "3Project fail; the names of the JavaScript object and the F# record fields don't match"
+        Array.map2
+            (fun value_type value -> project_aux value_type value)
+            r_field_types
+            j_field_values
     r_values
 
 /// <summary>Projects a JavaScript value into an F# record specified by <c>ty</c></summary>
@@ -366,73 +350,70 @@ and project_object_properties ty x (r_field_names: string[]) =
 /// <return>A value of type <c>'T</c> which is the F# equivalent of <c>x</c></return>
 and project_record ty (x:_JSValue) =
     let r_field_names = Utils.get_field_names ty
-    let j_field_names: string[] = JSEngine.getOwnPropertyNames(JSUtils.context, x) |> project
-    let length = r_field_names.Length
-    if r_field_names.Length <> j_field_names.Length
-    then
-        printf "this is r_field_names: %d\n" r_field_names.Length
-        printf "this is j_field_names: %d\n" j_field_names.Length
-        failwith "1Project fail; the names of the JavaScript object and the F# record fields don't match"
+    if JSEngine.isUndefined(x) then
+        FSharpValue.MakeRecord(ty, Array.create r_field_names.Length null)
     else
-        // check that both names lists are a permutation of each other
-        if (not (Utils.is_permutation r_field_names j_field_names))
-        then failwith "2Project fail; the names of the JavaScript object and the F# record fields don't match"
+        let j_field_names: string[] =
+            JSEngine.getOwnPropertyNames(JSUtils.context, x)
+            |> project
+        let length = r_field_names.Length
+        if r_field_names.Length <> j_field_names.Length
+        then
+            let error_message = 
+                "The number of fields in the JavaScript object and \
+                the F# record fields don't match"
+            raise (ProjectException error_message)
         else
-            let r_values = project_object_properties ty x r_field_names
-            // this shouldn't fail because the value have been projected as directed by ty
-            try
-                FSharpValue.MakeRecord(ty, r_values)
-            with
-                exn -> failwith "Projection into a record failed when creating the record"
-
+            // check that both names lists are a permutation of each other
+            if (not (Utils.is_permutation r_field_names j_field_names)) then
+                let error_message = 
+                    "The names of the JavaScript object and \
+                    the F# record fields don't match"
+                raise (ProjectException error_message)
+            else
+                let r_values = project_object_properties ty x r_field_names
+                // this shouldn't fail because the value have been projected as directed by ty
+                try
+                    FSharpValue.MakeRecord(ty, r_values)
+                with
+                    exn -> raise (ProjectException "Record creation failed")
+ 
 and embed_tuple tu =
     let elements = FSharpValue.GetTupleFields tu
     embed_ienumerable elements
-    
 
 and project_tuple (ty: System.Type) (x:_JSValue) =
     let length = JSEngine.getArrayLength(JSUtils.context, x)
     let tyArr = FSharpType.GetTupleElements ty
-    if tyArr.Length <> length then raise (ProjectException "Tuple type does not match JavaScript array")
+    if tyArr.Length <> length then
+        raise (ProjectException "Tuple type does not match JavaScript array")
     let _JSValArr = JSUtils.extract_array x length
-    let objArr = Array.map2 (fun t el -> project_hack t el) tyArr _JSValArr
+    let objArr = Array.map2 (fun t el -> project_aux t el) tyArr _JSValArr
     let result = FSharpValue.MakeTuple(objArr, ty)
     result
 
 let array ty =
     { embed = embed_ienumerable ;
-      // might need to pass some type information to project
-      // TODO get rid of float, is this even useful?
       project = project_array ty }
-
-// let list ty=
-//     { embed = embed_ienumerable ;
-//       project = project_list ty}
-
-// let func =
-//     { embed = fst << embed_func ;
-//       // don't need project
-//       project = fun x r -> failwith "can't project a fnc" }
-//       // project = project_func }
 
 /// <summary>Registers a <c>_JSValue</c> in the global object of JavaScript</summary>
 /// <param name="l">The list of tuples containing the name and the <c/>_JSValue> to be assigned to</param>
 /// <return><c>Unit</c></return>
+let clean_pointer (x:nativeint) =
+    free_object x |> ignore
 
+let cb = new JSEngine.CallBack(clean_pointer)
 
 type JSValue2(pointer: nativeint) =
     let mutable disposed = false
     let cleanup disposing =
-        printf "cleanup!\n"
         if not disposed then
             disposed <- true
             if disposing then
-                printf "disposing is true!\n"
                 let clean () =
                     free_object pointer |> ignore
-                    printf "calling clean() from c++ most likely\n"
                     ()
-                let cb = new JSEngine.VoidFSharpFunction(clean)
+                clean_pointer(pointer)
                 JSEngine.makeWeak(pointer, cb)
                 ()
     member this.Pointer = pointer
@@ -457,14 +438,11 @@ type JSValue2(pointer: nativeint) =
             cleanup(true)
             GC.SuppressFinalize(this)
 
-
-
-
-
-
-
 let public_embed (x:obj) : JSValue2 =
     new JSValue2(embed x)
+
+let public_poly_func_embed x : JSValue2 =
+    new JSValue2(embed_poly_func x)
 
 let public_project<'T> (x:JSValue2) : 'T =
     project<'T> (x.Pointer)

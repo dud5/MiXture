@@ -1,0 +1,14 @@
+open Mixture
+
+let string_id :string -> unit = NEmbedding.public_embed >> NEmbedding.public_project<string> >> ignore
+
+
+let s = "This is a test string"
+
+[<EntryPoint>]
+let main args =
+    let max = int args.[0]
+    for i = 1 to max do
+        (string_id s) |> ignore
+    exit 0
+  

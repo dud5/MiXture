@@ -146,7 +146,7 @@ type Valid() =
         let zero = public_embed (0)
         Assert.AreEqual(public_project zero, 0)
 
-                        
+
     [<Test>]
     member this.Infinities() =
         let posinf = public_embed (System.Double.PositiveInfinity)

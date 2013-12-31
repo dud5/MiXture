@@ -1,0 +1,15 @@
+open Mixture
+
+type int_re =
+    { I : int }
+
+let int_re_id :int_re -> unit = NEmbedding.public_embed >> NEmbedding.public_project<int_re> >> ignore
+let a = {I = 42}
+
+[<EntryPoint>]
+let main args =
+    let max = int args.[0]
+    for i = 1 to max do
+        int_re_id a
+    exit 0
+

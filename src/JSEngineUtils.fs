@@ -5,7 +5,8 @@ open System.Runtime.InteropServices
 // Represents an F# function that will be accessible from JavaScript
 type FSharpFunction = delegate of nativeint -> nativeint
 type VoidFSharpFunction = delegate of unit -> unit
-
+type WeakReferenceCallBack = delegate of (nativeint * nativeint) -> unit
+type CallBack = delegate of nativeint -> unit
 ///////
 /////// GENERAL UTILS
 ///////
@@ -21,9 +22,7 @@ extern void print_result(nativeint, nativeint)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern nativeint createContext()
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-extern void disposeHandle(nativeint)
-[<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
-extern void makeWeak(nativeint, VoidFSharpFunction)
+extern void makeWeak(nativeint, CallBack)
 [<DllImport("v8_helper.dylib", CallingConvention=CallingConvention.Cdecl)>]
 extern void forceGC()
 // return a nativeint pointing to a JavaScript value that is an argument

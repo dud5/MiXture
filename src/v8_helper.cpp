@@ -5,28 +5,40 @@
 
 using namespace v8;
 using namespace std;
-typedef void (*CALLBACK)();
+typedef void (*CALLBACK)(Persistent<Value>);
 
 extern "C" void disposeHandle(Persistent<Value> object, void* parameter) {
-    cout << "Hello from disposeHandle c++" << endl;
-    CALLBACK *cleanup = static_cast<CALLBACK *> (parameter);
-    (*cleanup)();
+//    cout << "Hello from disposeHandle c++" << endl;
+    CALLBACK cleanup = reinterpret_cast<CALLBACK>(reinterpret_cast<long>(parameter));
+//    cout << "After the cast" << endl;
+	(cleanup)(object);
+//    cout << "After the call" << endl;
     object.Dispose();
+//    cout << "After the dipose" << endl;
     object.Clear();
+//    cout << "After the clear" << endl;
 }
+
 
 extern "C" void makeWeak(Persistent<Value> prst, CALLBACK* cleanup) {
     prst.MakeWeak(cleanup, disposeHandle);
-    cout << "Hello from makeWeak c++" << endl;
+//    cout << "Hello from makeWeak c++" << endl;
 }
 
 extern "C" void forceGC() {
-    while(!V8::IdleNotification()) {}; 
+	while (!v8::V8::IdleNotification()); 
 }
 
 
 extern "C" Persistent<Context> createContext() {
     return Context::New();
+}
+
+extern "C" void test(WeakReferenceCallback* cleanup) {
+    Persistent<Context> c = createContext();
+    HandleScope handle_scope;
+    Persistent<Object> o = Persistent<Object>::New(Object::New());
+    o.MakeWeak(cleanup, disposeHandle);
 }
 
 // Extracts a C string from a V8 Utf8Value.
@@ -277,7 +289,7 @@ extern "C" Handle<Value> makeNull() {
 extern "C" Handle<Value> makeFunction(Persistent<Context> context, InvocationCallback cb) {
     HandleScope handle_scope;
     Context::Scope context_scope(context);
-    Persistent<Value> result = Persistent<Value>::New(FunctionTemplate::New(cb)->GetFunction());
+    Persistent<Object> result = Persistent<Object>::New(FunctionTemplate::New(cb)->GetFunction());
     return result;
 }
 

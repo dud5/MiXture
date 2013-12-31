@@ -51,7 +51,7 @@ module LumpEmbedding =
                 disposed <- true
                 if disposing then
                     printf "disposing is true!\n"
-                JSEngine.disposeHandle(pointer)
+//                JSEngine.disposeHandle(pointer, nativeint(0))
                 ()
 
         static let _context = JSEngine.createContext()
@@ -197,6 +197,6 @@ module LumpEmbedding =
         // TODO: get rid of this (moving it to the finalizer of JSLump)
         let dispose_handle handle =
             match handle with
-                | JS(pointer) -> JSEngine.disposeHandle(pointer)
+ //               | JS(pointer) -> JSEngine.disposeHandle(pointer, nativeint(0))
                 | _ -> failwith "disposeHandle only implemented for JSLump"
 
